@@ -1,0 +1,285 @@
+
+Problems:
+
+1) Offset current-measurement drifts. 
+  - Use zener diode + 2 equal transistors
+  - Continuously re-calibrate
+
+	Measurements:
+	09/05  9:55  2.52V / -0.11A 
+
+2) Resolution too low at low currents. 
+  - Change amplification of last opamp section
+  - Add second opamp section for low currents and
+    switch between 2 resolutions, f.e. at 4.5 A.
+
+3) Low-pass filter may add too much error.
+  - increase sampling freq & filter edge freq
+  - decrease order of filter.
+
+
+TODO:
+
+1) Higher voltages with variac
+
+2) User interface with python script
+
+3) Nelder Mead optimizer
+
+
+Simulate with 6 kHz, 50% duty and see max amp.
+-> no success at 6 kHz. Max current about 40 Amps.
+
+
+ORDER:
+
+- transistors 
+  - small signal NPN+PNP
+  - high voltage NPN like BF393
+
+- 2.5V zeners / 0.9V zener / ref voltage.
+
+- SMD IC's Kimo's remote
+
+- PCB's
+
+- Litze / tin
+
+- screwing connectors
+
+- some pots, like 10-turns 
+
+- OPAMPS
+  - TL074/084
+  - LM324
+
+- Long Arduino/Beagle connectors/headers
+
+- External ADC or Arduino Zero or Due (EUR 43) (12-bit ADC)
+
+
+
+
+----------------------------------------------------------------------
+
+Arduino Due also has 12-bit ADC.
+
+Arduino comparison and ADC explanation and calibration:
+http://www.djerickson.com/arduino/
+
+Due:
+Flash     : 512K
+RAM       : 96K
+ADC inputs: 16 x 12 bits, 1MHz
+
+http://frenki.net/2013/10/fast-analogread-with-arduino-due/
+
+"With this improvement conversion time dropped to 1.79uS."
+
+That would be 558 kHz.
+
+Well enough for 3 channels at 128 or 2 at 256 kHz. :)
+
+"But then I found great piece of code from arduino forum use
+"stimmer" which ignores analogRead by using more direc
+approach: http://goo.gl/Bn8Z4P
+With this solution single conversion takes only 1uS
+And now we have a cheap 1MSa/s oscilloscope. ;)"
+
+
+This is in free-running mode, though. 
+
+That would mean: 1 MHz max, or 500 kHz for 2 channels or
+333 kHz for 3 channes.
+Well enough for 3 channels at 128 or 256 kHz. :)
+
+
+Comments:
+
+"To get 1 msps you need to set prescaller at 21 MHz.  Right, it's
+"overclocking" , as data sheet says 20 MHz is max Check it out, there is
+a code: http://coolarduino.blogspot.ca/2015_06_01_archive.html"
+
+Available via archive.org:
+
+http://web.archive.org/web/20150814074247/http://coolarduino.blogspot.ca/2015/07/fast-sampling-with-arduino-due.html
+
+
+Further comments:
+
+-:-
+
+Anatoly Kuzmenko : Hi! Thanks for the tip! I've checked out the Atmel
+SAM3X8E datasheet
+(http://www.atmel.com/.../Atmel-11057-32-bit-Cortex-M3...). And I found
+that the ADCClock=MCK/((PRESCAL+1)*2) in page 1334. Also, in page 1403,
+it shows that max. ADC Clock is 22MHZ , and the Conversion
+time(tCONV)=20*ADC Clock Period(tCP_ADC) . That means, theoretically,
+Due's ADC sampling rate= MCK/40N, where MCK=84MHZ and N=2 to 42. The
+maximum sampling rate would be 84MHZ/(40*2)=1.05MHZ ! It's better than
+expected, and It's not overclocking!
+
+Am I right?
+Like · Reply · Jul 10, 2015 9:56am
+Anatoly Kuzmenko ·
+Centre Pauline Julien
+
+Chi-hao Li : Wrong. I'm sure, atmel made another mistake, "typo" this
+time. I have doc dated 2012, that says 20 MHz:
+
+https://drive.google.com/.../0Bw4tXXvyWtFVdmRsLVh.../view...
+
+
+
+Here is confirmation:
+
+http://asf.atmel.com/docs/latest/sam3x/html/adc_8h.html
+
+This explain, why you can't run ADC at 1 MHZ if you set : adc_init(ADC,
+SystemCoreClock, ADC_FREQ_MAX, ADC_STARTUP_FAST);
+
+
+It has to be:
+
+adc_init(ADC, SystemCoreClock, 21000000UL, ADC_STARTUP_FAST);
+
+http://coolarduino.blogspot.ca/.../fast-sampling-with...
+
+-:-
+
+
+
+Continue at:
+
+https://gist.github.com/pklaus/5921022
+
+In-circuit debugging:
+
+http://forum.arduino.cc/index.php?topic=134907.15
+
+"For those interested in debugging Arduino Due and saving some money, I
+recommend to use an Atmel ICE that costs around $25 or a SWD CMSIS-DAP
+($20) like the one from adafruit and shown in the following picture,
+instead of pay over $100 for a SAM-ICE. Of course, the mentioned cheap
+options have limited features but at least let you to perform debugging
+functions like stepping, breakpoints, watch points, and firmware
+downloads."
+
+The Adafruit one can be ordered in the UK for about EUR 40, incl p&p:
+http://www.ebay.nl/itm/Adafruit-IBDAP-CMSIS-DAP-JTAG-SWD-Debug-Adapter-Kit-ADA2764-/151984771454?hash=item2362ff917e:g:P40AAOSwQYZWwh8x
+
+
+
+Other boards:
+
+BeagleBone
+
+https://www.conrad.nl/nl/seeed-studio-102010027-beaglebone-green-1389300.html
+
+EUR 50.
+
+EUR 36 at Mouser:
+http://nl.mouser.com/ProductDetail/Seeed-Studio/102010027/?qs=Hlcjo%2fO3pQ5AxSET1oW%252b%252bg%3d%3d
+
+BB-BBLK-000 Rev C BeagleBone Black Mini-PC Rev C (element14 editie)
+EUR 65
+EUR 52 at Mouser
+
+
+
+http://www.seeedstudio.com/wiki/BeagleBone_Green#Analog_Inputs
+
+This is a single 12-bit analog-to-digital converter with 8 channels,
+7 of which are made available on the headers.  
+
+
+http://beaglebone.cameon.net/home/reading-the-analog-inputs-adc
+
+There are 7 analog inputs on the BeagleBone.
+
+ADC properties:
+ - 12 bits (Output values in the range 0-4095)
+ - 125ns sample time -> 8 MHz :)
+ - 0-1.8V range (do not exceed!)
+ - 2 uA current flows into the ADC pin in this range
+ - If using a voltage divider, the lower leg (the one connected to ground) should be <= 1k Ohm
+ - Since we are measuring millivolts, resistors with 0.1% error tolerance should be used in a voltage divider.
+ - There is a 1.8V reference voltage VDD_ADC at Port 9 Pin 32.
+ - There is a GNDA_ADC that should be grounded on Port9 Pin 34.
+
+Comment:
+
+Thanks for infos, but I think that ADC sub-system sample time is about
+15 ADC clock cycles (at 24MHz (typ) it will be 41.6nSec per cycle)
+results into about 625nSec .  See Technical Reference for AM335x page
+1152 (REV.F) .
+
+That would mean: 1.6 MHz max, or 800 kHz for 2 channels c.q. 533 kHz for
+3 channes.  Well enough for 3 channels at 128 or 256 kHz. :)
+
+Driver:
+
+https://github.com/pgmmpk/beaglebone_pru_adc (refers to above comment)
+
+
+
+The libpruio library appears to be a better driver:
+
+http://beagleboard.org/project/libpruio/
+http://users.freebasic-portal.de/tjf/Projekte/libpruio/doc/html/
+https://www.freebasic-portal.de/downloads/fb-on-arm/libpruio-325.html
+
+This uses the Programmable Realtime Unit SubSystem (= PRUSS or just PRU)
+co-processors for accessing the hardware, so the CPU does not need to
+bother handling the I/O. 
+
+There is a small bug in the library, which limits the sampling rate,
+which can be patched manually, as stated by the author:
+
+
+https://groups.google.com/forum/#!msg/beagleboard/CN5qKSmPIbc/2UdstwjNhHMJ
+
+-:-
+Regarding the ADC speed I made some further testing and it seems that I
+mis-interpreted the TRM. The ADC subsystem can sample at least at 200
+kS/s. This speed also works for multiple channels. Find an example of
+our channels at 44.1 kHz in this post. An overall sampling rate of 200
+kHz was also possible (four channels).
+
+So the limiting in the current libpruio-0.2 is too much on the safe
+site. If you don't want to wait for the next version, you can adapt the
+code by yourself (FreeBASIC compiler required). Replace in file
+pruio_adc.bas in function PruIo.configure(...) the lines
+
+      d *= (Conf->ADC_CLKDIV + 1) * 417 '417 ≈ 1000000 / 2400 (= 1 GHz / 2.4 MHz)
+      d += 30 '                             PRU cycles for restart [GHz]
+      IF Tmr <= d THEN     .Errr = @"sample rate too big" : RETURN .Errr
+
+by the following code
+
+      d = (d * (Conf->ADC_CLKDIV + 1) * 1000) \ 24
+      IF Tmr <= d ORELSE Tmr < 5000 THEN _
+                           .Errr = @"sample rate too big" : RETURN .Errr
+
+You may play a bit with the absolute value 5000. On my BBB the timing is
+OK up to a frequency of 240 kHz (4165). But this may vary from board to
+board.
+-:-
+
+
+
+
+Beagle Connectors:
+
+
+https://www.adafruit.com/category/75
+
+2x23 Male Headers for BeagleBone Black - Two Pack!
+
+These simple 2x23 male headers are a great addition to your Beagle Bone
+Black, plugging right into each set of side-sockets.  Each pack comes
+with two headers so you can connect prototype PCBs or capes on. Each
+header is 0.1"x 0.1" grid spacing
+
+
+

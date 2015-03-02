@@ -1,0 +1,22 @@
+
+
+http://electronics.stackexchange.com/questions/56324/negative-voltage-level-shifting-to-an-adc
+
+-> This one at least gives some idea how to calculate the values for the
+resistors...
+
+
+http://www.daycounter.com/Circuits/OpAmp-Level-Shifter/OpAmp-Level-Shifter.phtml
+-> As does this one...
+
+
+http://electronics.stackexchange.com/questions/30719/analog-voltage-level-conversion-level-shift
+-> the one with just two pots seems attractive, although it is inverting.....
+
+
+https://www.maximintegrated.com/en/app-notes/index.mvp/id/4836
+http://electronicdesign.com/boards/non-inverting-level-shifter-requires-only-one-op-amp-one-supply-voltage
+
+
+
+

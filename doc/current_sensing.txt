@@ -1,0 +1,32 @@
+
+TI has a/o the INA210-214 and INA199
+See a/o: http://www.ti.com/lit/ml/slyb194a/slyb194a.pdf
+
+Both are available at Conrad:
+
+https://www.conrad.nl/nl/texas-instruments-ina213aidckr-pmic-sot-6-1013584.html#openLayer=wish-list-layer
+
+https://www.conrad.nl/nl/lineaire-ic-operational-amplifier-texas-instruments-ina199a1dckr-stroomsensor-1071876.html#openLayer=wish-list-layer
+
+
+Both the INA199A1/B1 and the INA213A have a gain of 50, which appears to
+be more than sufficient. We can always use a voltage divider at the
+output towards the reference voltage.
+
+Difference seems to be that the 199 has an accuracy of 1.5%, while the
+213 has 1%. Both the 213 and the INA199A1 and INA199B1 have a bandwidth
+of 80 kHz, which should be sufficient.
+
+The 213 seems a bit better than the 199, and is also cheaper....
+
+
+
+
+LT also has an interesting pdf on this subject:
+http://cds.linear.com/docs/en/application-note/an105fa.pdf
+
+ 
+At the page for the LT1797, there is an example for use as current
+sensor:
+
+http://www.linear.com/product/LT1797

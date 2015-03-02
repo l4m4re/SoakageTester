@@ -1,0 +1,59 @@
+http://web.archive.org/web/20150814074247/http://coolarduino.blogspot.ca/2015/07/fast-sampling-with-arduino-due.html
+
+
+Fast sampling with Arduino DUE.
+
+Almost everyone knows that ADC of the Arduino DUE is capable to sample
+input waveform up to 1 MHz.
+
+
+//  adc_init(ADC, SystemCoreClock, ADC_FREQ_MAX, ADC_STARTUP_FAST);  
+
+adc_init(ADC, SystemCoreClock, 21000000UL, ADC_STARTUP_FAST);
+
+
+Setting ADC_FREQ_MAX would allow you to run ADC at 14MHz, having 666 kHz
+sampling rate. It seems to me, that ADC requires 21 clock cycles to
+complete conversion, dispute whatever they say in their encrypted
+datasheet.
+
+Below you may see all registers set-up (including DMA) to run ADC at
+1MHz sharp.
+
+Another thing is input sample and hold circuitry. I know it has some
+limits, but there is nothing in data sheet (again) that clearly says
+about it.  So to estimate arduino due's ADC performance, I create a
+simple project, connecting arduino to B/W LCD I had in my stock.
+
+Applying pure sine wave (another my project - AD9850 based generator) to
+biased at Vcc/2 analog input 0, I bumped frequency up. In first to
+10.050 MHz, and observed clear picture on display ! 
+
+Than, 20.050 MHz - it looks unbelievable perfect again!  30.050 MHz
+shows decreasing in amplitude, which is I'm pretty sure, due to LC
+on-board filter, DDS module has.  Its really impressive. 50 MHz
+oscilloscope out of 20$ board. Well, using under-sampling, but
+nevertheless.
+
+
+void adc_setup ()
+{
+  pmc_enable_periph_clk(ID_ADC);
+  adc_init(ADC, SystemCoreClock, 21000000UL, ADC_STARTUP_FAST);
+  NVIC_EnableIRQ (ADC_IRQn);                   
+  adc_disable_all_channel(ADC);
+  adc_enable_interrupt(ADC, ADC_IER_RXBUFF);
+  ADC->ADC_RPR  =  (uint32_t)  adcIn;          // DMA buffer
+  ADC->ADC_RCR  =  INP_BUFF;
+  ADC->ADC_PTCR =  1;
+  adc_set_bias_current(ADC, 0x01);
+  adc_enable_channel(ADC, ADC_CHANNEL_7);      // AN0
+
+  ADC->ADC_MR = (ADC->ADC_MR & 0xFFFFFF7F);    //DISABLE
+  adc_configure_trigger(ADC, ADC_TRIG_SW, 1);
+
+  adc_start(ADC);
+} 
+
+
+
