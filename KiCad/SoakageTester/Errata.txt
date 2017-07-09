@@ -1,0 +1,14 @@
+
+Known errors/issues.
+====================
+
+
+* The Bedini circuit around Q3 is incorrect. Only the spike recovery circuit
+ (D1) is included, but not the coil activation connection to the collector of
+Q3. 
+
+* C7 has been placed close to U6 instead of close to U5. This has led to
+  unnecesary long connections.
+
+
+
