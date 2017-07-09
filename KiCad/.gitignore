@@ -1,0 +1,33 @@
+# For file format info see:
+#  http://kicad-pcb.org/help/file-formats/
+#
+
+# temp / backup files
+*.bak
+*.bck
+*.tmp
+*.000
+*.kicad_pcb-bak
+*-cache.lib
+*-rescue.lib
+*-save.pro
+*-save.kicad_pcb
+_autosave-*
+
+# Netlist files (exported from Eeschema)
+*.net
+
+# Autorouter files (exported from Pcbnew)
+.dsn
+
+# Exported BOM files
+*.xml
+*.csv
+
+# Zipped Gerber files
+*.zip
+
+# other
+*~
+*#
+

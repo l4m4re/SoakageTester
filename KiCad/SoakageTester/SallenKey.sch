@@ -1,0 +1,183 @@
+EESchema Schematic File Version 2
+LIBS:power
+LIBS:device
+LIBS:transistors
+LIBS:conn
+LIBS:linear
+LIBS:regul
+LIBS:74xx
+LIBS:cmos4000
+LIBS:adc-dac
+LIBS:memory
+LIBS:xilinx
+LIBS:microcontrollers
+LIBS:dsp
+LIBS:microchip
+LIBS:analog_switches
+LIBS:motorola
+LIBS:texas
+LIBS:intel
+LIBS:audio
+LIBS:interface
+LIBS:digital-audio
+LIBS:philips
+LIBS:display
+LIBS:cypress
+LIBS:siliconi
+LIBS:opto
+LIBS:atmel
+LIBS:contrib
+LIBS:valves
+LIBS:Texas_Instruments
+LIBS:LamaresLib
+LIBS:Beagle
+LIBS:CapTester-cache
+EELAYER 25 0
+EELAYER END
+$Descr A4 11693 8268
+encoding utf-8
+Sheet 15 19
+Title ""
+Date ""
+Rev ""
+Comp ""
+Comment1 ""
+Comment2 ""
+Comment3 ""
+Comment4 ""
+$EndDescr
+Text GLabel 2350 1750 0    60   BiDi ~ 0
+OPAMP_Vss
+Text GLabel 2350 3150 0    60   BiDi ~ 0
+OPAMP_Vdd
+$Comp
+L LM2902N U1
+U 4 1 592D457B
+P 4750 2350
+AR Path="/592D275E/592D3C54/592D457B" Ref="U1"  Part="1" 
+AR Path="/592D275E/592D5259/592D457B" Ref="U1"  Part="2" 
+AR Path="/592D275E/592D6921/592D457B" Ref="U1"  Part="3" 
+AR Path="/592D275E/592D7C38/592D457B" Ref="U1"  Part="4" 
+F 0 "U1" H 4750 2550 50  0000 L CNN
+F 1 "LM2902N" H 4750 2150 50  0000 L CNN
+F 2 "Housings_DIP:DIP-14_W7.62mm_Socket_LongPads" H 4700 2450 50  0001 C CNN
+F 3 "" H 4800 2550 50  0001 C CNN
+	4    4750 2350
+	1    0    0    -1  
+$EndComp
+$Comp
+L R R29
+U 1 1 592D4582
+P 3900 2250
+AR Path="/592D275E/592D3C54/592D4582" Ref="R29"  Part="1" 
+AR Path="/592D275E/592D5259/592D4582" Ref="R41"  Part="1" 
+AR Path="/592D275E/592D6921/592D4582" Ref="R47"  Part="1" 
+AR Path="/592D275E/592D7C38/592D4582" Ref="R49"  Part="1" 
+F 0 "R49" V 3980 2250 50  0000 C CNN
+F 1 "1234" V 3900 2250 50  0000 C CNN
+F 2 "Resistors_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P2.54mm_Vertical" V 3830 2250 50  0001 C CNN
+F 3 "" H 3900 2250 50  0001 C CNN
+	1    3900 2250
+	0    1    1    0   
+$EndComp
+$Comp
+L R R28
+U 1 1 592D4589
+P 3400 2250
+AR Path="/592D275E/592D3C54/592D4589" Ref="R28"  Part="1" 
+AR Path="/592D275E/592D5259/592D4589" Ref="R40"  Part="1" 
+AR Path="/592D275E/592D6921/592D4589" Ref="R46"  Part="1" 
+AR Path="/592D275E/592D7C38/592D4589" Ref="R48"  Part="1" 
+F 0 "R48" V 3480 2250 50  0000 C CNN
+F 1 "453" V 3400 2250 50  0000 C CNN
+F 2 "Resistors_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P2.54mm_Vertical" V 3330 2250 50  0001 C CNN
+F 3 "" H 3400 2250 50  0001 C CNN
+	1    3400 2250
+	0    -1   -1   0   
+$EndComp
+$Comp
+L C C15
+U 1 1 592D4590
+P 3650 2500
+AR Path="/592D275E/592D3C54/592D4590" Ref="C15"  Part="1" 
+AR Path="/592D275E/592D5259/592D4590" Ref="C17"  Part="1" 
+AR Path="/592D275E/592D6921/592D4590" Ref="C19"  Part="1" 
+AR Path="/592D275E/592D7C38/592D4590" Ref="C21"  Part="1" 
+F 0 "C21" H 3675 2600 50  0000 L CNN
+F 1 "10n" H 3675 2400 50  0000 L CNN
+F 2 "Capacitors_THT:C_Rect_L7.2mm_W8.5mm_P5.00mm_FKP2_FKP2_MKS2_MKP2" H 3688 2350 50  0001 C CNN
+F 3 "" H 3650 2500 50  0001 C CNN
+	1    3650 2500
+	1    0    0    -1  
+$EndComp
+$Comp
+L C C16
+U 1 1 592D4597
+P 4150 2500
+AR Path="/592D275E/592D3C54/592D4597" Ref="C16"  Part="1" 
+AR Path="/592D275E/592D5259/592D4597" Ref="C18"  Part="1" 
+AR Path="/592D275E/592D6921/592D4597" Ref="C20"  Part="1" 
+AR Path="/592D275E/592D7C38/592D4597" Ref="C22"  Part="1" 
+F 0 "C22" H 4175 2600 50  0000 L CNN
+F 1 "1n" H 4175 2400 50  0000 L CNN
+F 2 "Capacitors_THT:C_Rect_L7.2mm_W4.5mm_P5.00mm_FKS2_FKP2_MKS2_MKP2" H 4188 2350 50  0001 C CNN
+F 3 "" H 4150 2500 50  0001 C CNN
+	1    4150 2500
+	1    0    0    -1  
+$EndComp
+$Comp
+L GNDA_ADC #PWR49
+U 1 1 592D459E
+P 4150 2900
+AR Path="/592D275E/592D3C54/592D459E" Ref="#PWR49"  Part="1" 
+AR Path="/592D275E/592D5259/592D459E" Ref="#PWR50"  Part="1" 
+AR Path="/592D275E/592D6921/592D459E" Ref="#PWR51"  Part="1" 
+AR Path="/592D275E/592D7C38/592D459E" Ref="#PWR52"  Part="1" 
+F 0 "#PWR52" H 4150 2650 50  0001 C CNN
+F 1 "GNDA_ADC" H 4150 2750 50  0000 C CNN
+F 2 "" H 4150 2900 60  0000 C CNN
+F 3 "" H 4150 2900 60  0000 C CNN
+	1    4150 2900
+	1    0    0    -1  
+$EndComp
+Text HLabel 2300 2250 0    60   Input ~ 0
+V_in
+Wire Wire Line
+	2300 2250 3250 2250
+Connection ~ 5250 2350
+Connection ~ 4150 2250
+Wire Wire Line
+	4150 2350 4150 2250
+Wire Wire Line
+	4150 2650 4150 2900
+Connection ~ 4400 2800
+Wire Wire Line
+	4400 2450 4400 2800
+Wire Wire Line
+	4450 2450 4400 2450
+Wire Wire Line
+	5050 2350 5400 2350
+Wire Wire Line
+	5250 2800 5250 2350
+Wire Wire Line
+	3650 2800 5250 2800
+Wire Wire Line
+	3650 2650 3650 2800
+Connection ~ 3650 2250
+Wire Wire Line
+	3650 2250 3650 2350
+Wire Wire Line
+	3550 2250 3750 2250
+Wire Wire Line
+	4050 2250 4450 2250
+Wire Wire Line
+	4650 3150 4650 2650
+Wire Wire Line
+	4650 1750 4650 2050
+Text HLabel 5400 2350 2    60   Input ~ 0
+V_out
+Wire Wire Line
+	4650 1750 2350 1750
+Wire Wire Line
+	4650 3150 2350 3150
+$EndSCHEMATC

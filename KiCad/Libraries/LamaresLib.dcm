@@ -1,0 +1,41 @@
+EESchema-DOCLIB  Version 2.0
+#
+$CMP -12V
+K POWER, PWR
+$ENDCMP
+#
+$CMP -5V
+K POWER, PWR
+$ENDCMP
+#
+$CMP BC337-40
+D Vce 45V, Ic 800mA, NPN Silicon Amplifier Transistor, TO-92
+K NPN Silicon Amplifier Transistor
+F http://www.onsemi.com/pub_link/Collateral/BC237-D.PDF
+$ENDCMP
+#
+$CMP BUX85
+D 2A Ic, 450V Vce, Silicon Switching Power Transistors NPN, TO-220
+K Switching Power Transistor NPN
+F http://www.onsemi.com/pub/Collateral/BUX85-D.PDF
+$ENDCMP
+#
+$CMP IRFB3307
+D 75V Vds, 130A Id, HEXFET N-Channel MOSFET, TO-220
+K HEXFET N-Channel MOSFET
+F http://www.irf.com/product-info/datasheets/data/irfs3307.pdf
+$ENDCMP
+#
+$CMP IXTP10P50P
+D -500V Vds, -10A Id, P-Channel Enhancement Mode Avalanche Rated Power MOSFET, TO-220
+K P-Channel MOSFET
+F http://ixapps.ixys.com/DataSheet/DS99911D(IXTA-TH-TP-TQ10P50P).pdf
+$ENDCMP
+#
+$CMP MPSA42
+D Vce 300V, Ic 500mA, NPN High Voltage Transistor, TO-92
+K NPN High Voltage Transistor
+F http://www.onsemi.com/pub_link/Collateral/MPSA42-D.PDF
+$ENDCMP
+#
+#End Doc Library

@@ -1,0 +1,199 @@
+EESchema Schematic File Version 2
+LIBS:power
+LIBS:device
+LIBS:transistors
+LIBS:conn
+LIBS:linear
+LIBS:regul
+LIBS:74xx
+LIBS:cmos4000
+LIBS:adc-dac
+LIBS:memory
+LIBS:xilinx
+LIBS:microcontrollers
+LIBS:dsp
+LIBS:microchip
+LIBS:analog_switches
+LIBS:motorola
+LIBS:texas
+LIBS:intel
+LIBS:audio
+LIBS:interface
+LIBS:digital-audio
+LIBS:philips
+LIBS:display
+LIBS:cypress
+LIBS:siliconi
+LIBS:opto
+LIBS:atmel
+LIBS:contrib
+LIBS:valves
+LIBS:Texas_Instruments
+LIBS:LamaresLib
+LIBS:Beagle
+LIBS:CapTester-cache
+EELAYER 25 0
+EELAYER END
+$Descr A4 11693 8268
+encoding utf-8
+Sheet 5 19
+Title ""
+Date ""
+Rev ""
+Comp ""
+Comment1 ""
+Comment2 ""
+Comment3 ""
+Comment4 ""
+$EndDescr
+Text HLabel 1600 3100 0    60   Input ~ 0
+IN
+Text HLabel 3550 2550 2    60   Input ~ 0
+OUT_Emitter
+$Comp
+L 4N25 U2
+U 1 1 5910768B
+P 2700 2350
+AR Path="/587E487B/591C9EED/5910768B" Ref="U2"  Part="1" 
+AR Path="/587E487B/591C9EFF/5910768B" Ref="U3"  Part="1" 
+AR Path="/587E487B/591C9F11/5910768B" Ref="U4"  Part="1" 
+F 0 "U4" H 2500 2550 50  0000 L CNN
+F 1 "4N25" H 2700 2550 50  0000 L CNN
+F 2 "Housings_DIP:DIP-6_W7.62mm_Socket_LongPads" H 2500 2150 50  0001 L CIN
+F 3 "" H 2700 2350 50  0001 L CNN
+	1    2700 2350
+	1    0    0    -1  
+$EndComp
+Text HLabel 3550 2350 2    60   Input ~ 0
+Vss
+$Comp
+L BC337-40 Q7
+U 1 1 5910A333
+P 2300 3100
+AR Path="/587E487B/591C9EED/5910A333" Ref="Q7"  Part="1" 
+AR Path="/587E487B/591C9EFF/5910A333" Ref="Q8"  Part="1" 
+AR Path="/587E487B/591C9F11/5910A333" Ref="Q9"  Part="1" 
+F 0 "Q9" H 2500 3175 50  0000 L CNN
+F 1 "BC337-40" H 2500 3100 50  0000 L CNN
+F 2 "TO_SOT_Packages_THT:TO-92_Molded_Narrow" H 2500 3025 50  0001 L CIN
+F 3 "" H 2300 3100 50  0001 L CNN
+	1    2300 3100
+	1    0    0    -1  
+$EndComp
+$Comp
+L R R12
+U 1 1 5910A37E
+P 2400 2700
+AR Path="/587E487B/591C9EED/5910A37E" Ref="R12"  Part="1" 
+AR Path="/587E487B/591C9EFF/5910A37E" Ref="R15"  Part="1" 
+AR Path="/587E487B/591C9F11/5910A37E" Ref="R18"  Part="1" 
+F 0 "R18" V 2480 2700 50  0000 C CNN
+F 1 "1k" V 2400 2700 50  0000 C CNN
+F 2 "Resistors_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P2.54mm_Vertical" V 2330 2700 50  0001 C CNN
+F 3 "" H 2400 2700 50  0001 C CNN
+	1    2400 2700
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	2400 2550 2400 2450
+Wire Wire Line
+	2400 2850 2400 2900
+Wire Wire Line
+	2400 3300 2400 3350
+$Comp
+L R R11
+U 1 1 5910A3F2
+P 1850 3100
+AR Path="/587E487B/591C9EED/5910A3F2" Ref="R11"  Part="1" 
+AR Path="/587E487B/591C9EFF/5910A3F2" Ref="R14"  Part="1" 
+AR Path="/587E487B/591C9F11/5910A3F2" Ref="R17"  Part="1" 
+F 0 "R17" V 1930 3100 50  0000 C CNN
+F 1 "3k3" V 1850 3100 50  0000 C CNN
+F 2 "Resistors_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P2.54mm_Vertical" V 1780 3100 50  0001 C CNN
+F 3 "" H 1850 3100 50  0001 C CNN
+	1    1850 3100
+	0    1    1    0   
+$EndComp
+Wire Wire Line
+	2100 3100 2000 3100
+Wire Wire Line
+	1700 3100 1600 3100
+Text HLabel 3600 3350 2    60   Input ~ 0
+Vdd
+Wire Wire Line
+	3550 2350 3000 2350
+Wire Wire Line
+	3550 2550 3300 2550
+Wire Wire Line
+	3300 2550 3300 2450
+Wire Wire Line
+	3300 2450 3000 2450
+$Comp
+L R R13
+U 1 1 5910A90E
+P 3100 2700
+AR Path="/587E487B/591C9EED/5910A90E" Ref="R13"  Part="1" 
+AR Path="/587E487B/591C9EFF/5910A90E" Ref="R16"  Part="1" 
+AR Path="/587E487B/591C9F11/5910A90E" Ref="R19"  Part="1" 
+F 0 "R19" V 3180 2700 50  0000 C CNN
+F 1 "1M" V 3100 2700 50  0000 C CNN
+F 2 "Resistors_THT:R_Axial_DIN0207_L6.3mm_D2.5mm_P2.54mm_Vertical" V 3030 2700 50  0001 C CNN
+F 3 "" H 3100 2700 50  0001 C CNN
+	1    3100 2700
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	3600 3350 3100 3350
+Wire Wire Line
+	3100 3350 3100 2850
+Wire Wire Line
+	3100 2550 3100 2250
+Wire Wire Line
+	3100 2250 3000 2250
+Wire Wire Line
+	2400 2000 2400 2250
+$Comp
+L GNDD #PWR10
+U 1 1 59209C6E
+P 2400 3350
+AR Path="/587E487B/591C9EED/59209C6E" Ref="#PWR10"  Part="1" 
+AR Path="/587E487B/591C9EFF/59209C6E" Ref="#PWR12"  Part="1" 
+AR Path="/587E487B/591C9F11/59209C6E" Ref="#PWR14"  Part="1" 
+F 0 "#PWR14" H 2400 3100 50  0001 C CNN
+F 1 "GNDD" H 2400 3200 50  0000 C CNN
+F 2 "" H 2400 3350 50  0001 C CNN
+F 3 "" H 2400 3350 50  0001 C CNN
+	1    2400 3350
+	1    0    0    -1  
+$EndComp
+$Comp
+L LED D8
+U 1 1 59286138
+P 2400 1850
+AR Path="/587E487B/591C9EFF/59286138" Ref="D8"  Part="1" 
+AR Path="/587E487B/591C9EED/59286138" Ref="D7"  Part="1" 
+AR Path="/587E487B/591C9F11/59286138" Ref="D9"  Part="1" 
+F 0 "D9" H 2400 1950 50  0000 C CNN
+F 1 "LED" H 2400 1750 50  0000 C CNN
+F 2 "LEDs:LED_D5.0mm" H 2400 1850 50  0001 C CNN
+F 3 "" H 2400 1850 50  0001 C CNN
+	1    2400 1850
+	0    -1   -1   0   
+$EndComp
+$Comp
+L +12V #PWR11
+U 1 1 59286169
+P 2400 1550
+AR Path="/587E487B/591C9EFF/59286169" Ref="#PWR11"  Part="1" 
+AR Path="/587E487B/591C9EED/59286169" Ref="#PWR9"  Part="1" 
+AR Path="/587E487B/591C9F11/59286169" Ref="#PWR13"  Part="1" 
+F 0 "#PWR13" H 2400 1400 50  0001 C CNN
+F 1 "+12V" H 2400 1690 50  0000 C CNN
+F 2 "" H 2400 1550 50  0001 C CNN
+F 3 "" H 2400 1550 50  0001 C CNN
+	1    2400 1550
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	2400 1700 2400 1550
+$EndSCHEMATC

@@ -1,0 +1,8 @@
+EESchema-DOCLIB  Version 2.0
+#
+$CMP INA213AIDCKT_SOT65P210X110-6N
+D 26-V, Bi-Directional, Zero-Drift, High Accuracy, Low-/High-Side, Voltage Out Current Shunt Monitor
+K ina213
+$ENDCMP
+#
+#End Doc Library
