@@ -34,3 +34,36 @@ This information has been provided to you free of charge for your use but remain
 element14 will in no case be liable for your use, or the results of your use, of the CAD models or any accompanying written materials. It is your responsibility to verify the results of your use of this information in your own particular engineering and product environment and you assume the entire risk of doing so or failing to do so. 
  
 Footprint designs were developed using standard layout guidelines for most common and practical applications. All schematic symbols, footprints and layer definitions should be validated by the customer’s own technical experts as application specific requirements may differ.
+
+
+
+###############################################################################
+# Converted to KiCad with Eagle2Kicad.
+###############################################################################
+
+Sources:
+ https://www.element14.com/community/servlet/JiveServlet/download/64304-1-101426/Texas%20Instruments.zip
+ https://www.element14.com/community/servlet/JiveServlet/download/64304-1-101427/Texas%20Instruments_By_element14_Batch_1.pdf
+
+Eagle2Kicad: https://github.com/DanChianucci/Eagle2Kicad
+
+Log file:
+-:-
+###############################################################################
+#Session: 2017-01-17 21:12:26
+###############################################################################
+Logging at Level: INFO
+
+
+*******************************************
+Converting Lib: /home/arend/Documenten/KiCad/Libraries/TI_Eagle_Lib/Texas
+Instruments/Texas Instruments_By_element14_Batch_1.lbr
+Module Output: /home/arend/Documenten/KiCad/Libraries/TI_Eagle_Lib/Texas
+Instruments/Texas Instruments_By_element14_Batch_1.mod
+Symbol Output: /home/arend/Documenten/KiCad/Libraries/TI_Eagle_Lib/Texas
+Instruments/Texas Instruments_By_element14_Batch_1.lib
+Lib Name: Texas Instruments_By_element14_Batch_1
+
+Conversion Successfull
+*******************************************
+-:-
