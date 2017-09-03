@@ -1,140 +1,132 @@
-//-----------------------------------------------------------------------------
-// PWM.cpp
-//-----------------------------------------------------------------------------
-// Copyright 2016 Arend Lammertink
-//
-// This file is part of CapBatteryTest.
-//
-//    CapBatteryTest is free software: you can redistribute it and/or modify
-//    it under the terms of the GNU General Public License as published by
-//    the Free Software Foundation, either version 3 of the License, or
-//    (at your option) any later version.
-//
-//    CapBatteryTest is distributed in the hope that it will be useful,
-//    but WITHOUT ANY WARRANTY; without even the implied warranty of
-//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//    GNU General Public License for more details.
-//
-//    You should have received a copy of the GNU General Public License
-//    auint32_t with CapBatteryTest.  If not, see <http://www.gnu.org/licenses/>.
-//
-// Based on: "The Generating clock signal KHz script"
-//           http://domoticx.com/arduino-library-timerone/
-//
-//-----------------------------------------------------------------------------
-// Includes
-//-----------------------------------------------------------------------------
-
-#include <TimerOne.h>
-#include "defines.h"
-
-//-----------------------------------------------------------------------------
-// Globals
-//-----------------------------------------------------------------------------
-
-//uint16_t prescale[] = {0,1,8,64,256,1024}; // the range of prescale values
-uint32_t          PWMPeriod;     // the PWM period in microseconds
-uint32_t          PWMPulseWidth; // PWM pulsewidth in microseconds
-
-//-----------------------------------------------------------------------------
-// Internal Globals
-//-----------------------------------------------------------------------------
-uint16_t          PWMDuty;       // duty as a range from 0 to 1024, 
-                                 // 512 is 50% duty cycle
-//-----------------------------------------------------------------------------
-// Forward declarations
-//-----------------------------------------------------------------------------
-bool setPulseWidth(uint32_t microseconds);
-
-
-//-----------------------------------------------------------------------------
-// Main functions
-//-----------------------------------------------------------------------------
-
-
-void initPWM()
-{
-//    PWMPeriod     = 1000;    // the PWM period in microseconds
-//    PWMPulseWidth =  120;    // PWM pulsewidth in microseconds
-    
-    Timer1.initialize(PWMPeriod);        // initialize timer1
-}
-
-
-
-//-----------------------------------------------------------------------------
-// Starts PWM with PWMPeriod and PWMPulseWidth. Returns false if
-// pulsewidth out of range.
-//-----------------------------------------------------------------------------
-bool startPWM()
-{
-    // TCCR1A = 0;                 // clear control register A    // attempt to solve spurious spikes
-
-    if (!setPulseWidth(PWMPulseWidth)) return false;
-
-    Timer1.pwm(pwmOutPin, PWMDuty, PWMPeriod);
-
-    return true;
-}
-
-//-----------------------------------------------------------------------------
-// Stops PWM
-//-----------------------------------------------------------------------------
-void stopPWM()
-{
-    //Timer1.stop();  // TODO : check if this helps to get rid of the spurious spikes
-    Timer1.disablePwm(pwmOutPin);
-}
-
-
-
 /*
-    http://www.arduino.cc/en/Reference/Map
+ * PWM.cpp  Created on: 29 Apr 2014
+ * Copyright (c) 2014 Derek Molloy (www.derekmolloy.ie)
+ * Made available for the book "Exploring BeagleBone" 
+ * See: www.exploringbeaglebone.com
+ * Licensed under the EUPL V.1.1
+ *
+ * This Software is provided to You under the terms of the European 
+ * Union Public License (the "EUPL") version 1.1 as published by the 
+ * European Union. Any use of this Software, other than as authorized 
+ * under this License is strictly prohibited (to the extent such use 
+ * is covered by a right of the copyright holder of this Software).
+ * 
+ * This Software is provided under the License on an "AS IS" basis and 
+ * without warranties of any kind concerning the Software, including 
+ * without limitation merchantability, fitness for a particular purpose, 
+ * absence of defects or errors, accuracy, and non-infringement of 
+ * intellectual property rights other than copyright. This disclaimer 
+ * of warranty is an essential part of the License and a condition for 
+ * the grant of any rights to this Software.
+ * 
+ * For more details, see http://www.derekmolloy.ie/
+ */
 
-    map(value, fromLow, fromHigh, toLow, toHigh)
+#include "PWM.h"
+#include "util.h"
+#include <cstdlib>
 
-    Re-maps a number from one range to another. That is, a value of fromLow
-    would get mapped to toLow, a value of fromHigh to toHigh, values
-    in-between to values in-between, etc.
+namespace exploringBB {
 
-    Does not constrain values to within the range, because out-of-range
-    values are sometimes intended and useful. 
-*/
+PWM::PWM(string pinName) {
+	this->name = pinName;
+	this->path = PWM_PATH + this->name + "/";
+	this->analogFrequency = 100000;
+	this->analogMax = 3.3;
+}
 
-bool setPulseWidth(uint32_t microseconds)
-{
-  // uint16_t prescaleValue = prescale[Timer1.clockSelectBits];
+int PWM::setPeriod(unsigned int period_ns){
+	return write(this->path, PWM_PERIOD, period_ns);
+}
 
-  // calculate time per tick in ns
-  // uint32_t    precision = (F_CPU / 128000) * prescaleValue;   
-  // PWMPeriod = precision * ICR1 / 1000; // Period in microseconds
+unsigned int PWM::getPeriod(){
+	return atoi(read(this->path, PWM_PERIOD).c_str());
+}
 
-  if( microseconds < PWMPeriod)
-  {
-    PWMDuty = map(microseconds, 0,PWMPeriod, 0,1024);
-    if( PWMDuty < 1)
-      PWMDuty = 1;
+float PWM::period_nsToFrequency(unsigned int period_ns){
+	float period_s = (float)period_ns/1000000000;
+	return 1.0f/period_s;
+}
 
-    // RESOLUTION = 65536 for 16 bits timer 1
-    if(microseconds > 0 && PWMDuty < RESOLUTION) 
-    {
-//       Timer1.pwm(pwmOutPin, PWMDuty);
-       return true;
-    }
-  }
-  return false;
+unsigned int PWM::frequencyToPeriod_ns(float frequency_hz){
+	float period_s = 1.0f/frequency_hz;
+	return (unsigned int)(period_s*1000000000);
+}
+
+int PWM::setFrequency(float frequency_hz){
+	return this->setPeriod(this->frequencyToPeriod_ns(frequency_hz));
+}
+
+float PWM::getFrequency(){
+	return this->period_nsToFrequency(this->getPeriod());
+}
+
+int PWM::setDutyCycle(unsigned int duty_ns){
+	return write(this->path, PWM_DUTY, duty_ns);
+}
+
+int PWM::setDutyPerc(float percentage){
+	if ((percentage>100.0f)||(percentage<0.0f)) return -1;
+	unsigned int period_ns = this->getPeriod();
+	float duty_ns = period_ns * (percentage/100.0f);
+	this->setDutyCycle((unsigned int) duty_ns );
+	return 0;
+}
+
+unsigned int PWM::getDutyCycle(){
+	return atoi(read(this->path, PWM_DUTY).c_str());
+}
+
+float PWM::getDutyCyclePercent(){
+	unsigned int period_ns = this->getPeriod();
+	unsigned int duty_ns = this->getDutyCycle();
+	return 100.0f * (float)duty_ns/(float)period_ns;
+}
+
+int PWM::setPolarity(PWM::POLARITY polarity){
+	return write(this->path, PWM_POLARITY, polarity);
+}
+
+void PWM::invertPolarity(){
+	if (this->getPolarity()==PWM::ACTIVE_LOW) this->setPolarity(PWM::ACTIVE_HIGH);
+	else this->setPolarity(PWM::ACTIVE_LOW);
+}
+
+PWM::POLARITY PWM::getPolarity(){
+	if (atoi(read(this->path, PWM_POLARITY).c_str())==0) return PWM::ACTIVE_LOW;
+	else return PWM::ACTIVE_HIGH;
+}
+
+int PWM::calibrateAnalogMax(float analogMax){ //must be between 3.2 and 3.4
+	if((analogMax<3.2f) || (analogMax>3.4f)) return -1;
+	else this->analogMax = analogMax;
+	return 0;
+}
+
+int PWM::analogWrite(float voltage){
+	if ((voltage<0.0f)||(voltage>3.3f)) return -1;
+	this->setFrequency(this->analogFrequency);
+	this->setPolarity(PWM::ACTIVE_LOW);
+	this->setDutyPerc((100.0f*voltage)/this->analogMax);
+	return this->run();
+}
+
+int PWM::run(){
+	return write(this->path, PWM_RUN, 1);
+}
+
+bool PWM::isRunning(){
+	string running = read(this->path, PWM_RUN);
+	return (running=="1");
+}
+
+int PWM::stop(){
+	return write(this->path, PWM_RUN, 0);
+}
+
+PWM::~PWM(){
+	write(this->path, PWM_RUN, 0);
 }
 
 
-void show()
-{
-   Serial.print("The PWMPeriod is ");
-   Serial.println(PWMPeriod);
-   Serial.print("PWMDuty cycle is ");
-   // pwmRegister is ICR1A or ICR1B
-   Serial.print( map( pwmRegister, 0,ICR1, 1,99));      
-   Serial.println("%");
-   Serial.println();
-}
-      
-    
+} /* namespace exploringBB */

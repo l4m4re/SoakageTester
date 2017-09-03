@@ -34,7 +34,7 @@ int main(int argc, char **argv)
     if (pruio_gpio_setValue(io, GPO_OUT, 0)) { //         configure GPIO
              printf("setValue @GPO_OUT error (%s)\n", io->Errr); break;}
 
-    float_t freq = 100; //                           The start frequency.
+    float_t freq = 10; //                           The start frequency.
     if (pruio_pwm_setValue(io, PWM_OUT, freq, 0.5)) { //   configure PWM
       printf("failed setting output @PWM_OUT (%s)\n", io->Errr); break;}
 
@@ -59,8 +59,8 @@ int main(int argc, char **argv)
         a = io->DRam[0] & 0xfffe; // only even indexes from AIN0
       } while(io->Adc->Value[a] < volt_1);
 
-      if (pruio_pwm_setValue(io, PWM_OUT, freq, 0.0)) { // stop charging
-                 printf("failed stoping @PWM (%s)\n", io->Errr); break;}
+      //if (pruio_pwm_setValue(io, PWM_OUT, freq, 0.0)) { // stop charging
+      //           printf("failed stoping @PWM (%s)\n", io->Errr); break;}
       if (pruio_gpio_setValue(io, GPO_OUT, 1)) { //      start discharge
             printf("failed discharging start (%s)\n", io->Errr); break;}
 
