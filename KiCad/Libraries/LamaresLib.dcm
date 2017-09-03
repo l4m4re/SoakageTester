@@ -20,6 +20,11 @@ K Switching Power Transistor NPN
 F http://www.onsemi.com/pub/Collateral/BUX85-D.PDF
 $ENDCMP
 #
+$CMP D_ALT
+D Diode, alternativ symbol
+K diode
+$ENDCMP
+#
 $CMP IRFB3307
 D 75V Vds, 130A Id, HEXFET N-Channel MOSFET, TO-220
 K HEXFET N-Channel MOSFET
@@ -32,10 +37,20 @@ K P-Channel MOSFET
 F http://ixapps.ixys.com/DataSheet/DS99911D(IXTA-TH-TP-TQ10P50P).pdf
 $ENDCMP
 #
+$CMP Jumper_NC_Dual
+D Dual Jumper, normally closed
+K jumper bridge link nc
+$ENDCMP
+#
 $CMP MPSA42
 D Vce 300V, Ic 500mA, NPN High Voltage Transistor, TO-92
 K NPN High Voltage Transistor
 F http://www.onsemi.com/pub_link/Collateral/MPSA42-D.PDF
+$ENDCMP
+#
+$CMP Screw_Terminal_1x02
+D 2-pin screw terminal connector
+K screw terminal block
 $ENDCMP
 #
 #End Doc Library
