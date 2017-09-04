@@ -5,15 +5,14 @@ Licence: GPLv3
 
 Copyright 2016 by Thomas{ doT ]Freiherr[ At ]gmx[ DoT }net
 
-Compile by: `g++ -Wall -o CapTest CapTest.c -lpruio -lprussdrv`
+Compile by: 
+  `g++ -Wall -o SoakTest.cpp PWM.cpp GPIO.cpp util.cpp -lpruio -lprussdrv -lpthread`
 
 */
 
 #include "unistd.h"
 #include "time.h"
 #include "stdio.h"
-#include "pruio.h"
-#include "pruio_pins.h"
 
 #include<iostream>
 #include<unistd.h> //for usleep
@@ -21,6 +20,7 @@ Compile by: `g++ -Wall -o CapTest CapTest.c -lpruio -lprussdrv`
 #include <cstdlib> // for exit
 #include"PWM.h"
 #include"GPIO.h"
+#include"Sampler.h"
 
 using namespace exploringBB;
 using namespace std;
@@ -35,25 +35,25 @@ static PWM           _pwm("pwm_test_P9_21.12");  // P9_21 MUST be loaded as a sl
 static float         pwm_freq = 5000;
 static unsigned int  pwm_duration = 50000;  // in ns. 5 ms
 static GPIO          _outGPIO(GPIO_OUT);
-static pruIo         *io = 0;
+static Sampler       sampler;
 
-
-// pruio ADC parameters
-static const uint32 tmr = 5000; //!< The sampling rate in ns (5000 ns -> 200 kHz).
-static const uint32 NoStep = 2; //!< The number of active ADC steps (must match setStep calls and mask).
-static const uint32 mask = 3 << 9; //!< The active steps bitmaks (9 and 10).
-static uint32 samp   = 0;    //!< The number of samples, use all ERam
-static uint32 maxInd = 0;    //!< The maximum index in the ring buffer.
-
+static uint32        startChrgIdx=0, stopChrgIdx=0, startDischrgIdx=0, stopDischrgIdx=0;
 
 void startCharge()
 {
     if(_pwm.isRunning())
         _pwm.stop();
 
+
     _pwm.setPolarity(PWM::ACTIVE_HIGH);  // using active high PWM
     _pwm.setFrequency(pwm_freq);      // Set the period as a frequency
     _pwm.setDutyCycle(pwm_duration);
+
+    sampler.reset();
+
+    usleep(10000);       // 10 ms 
+    startChrgIdx = sampler.lastIdx();
+
     _pwm.run();
 }
 
@@ -64,10 +64,16 @@ void stopCharge()
 
     if(_pwm.isRunning())
         _pwm.stop();
+
+    usleep(10000);       // 10 ms 
+    stopChrgIdx = sampler.lastIdx();
 }
 
 void startDischarge()
 {
+    startDischrgIdx = sampler.lastIdx();
+    usleep(10000);       // 10 ms 
+
     _outGPIO.setDirection(OUTPUT);
     _outGPIO.setValue(HIGH);
 }
@@ -78,6 +84,9 @@ void stopDischarge()
     //printf("failed discharging stop (%s)\n", io->Errr); break;}
     
     _outGPIO.setValue(LOW);
+
+    usleep(10000);       // 10 ms 
+    stopDischrgIdx = sampler.lastIdx();
 }
 
 
@@ -85,27 +94,7 @@ void cleanUp()
 {
     stopCharge();
     stopDischarge();
-    if( io ) pruio_destroy(io);
-}
-
-int initADC()
-{
-    if (pruio_adc_setStep(io,  9, 0, 0, 0, 0)){ //         step 9, AIN-0 -> voltage
-        printf("ADC step 9 init failed: (%s)\n", io->Errr); return 0;}
-    if (pruio_adc_setStep(io, 10, 1, 0, 0, 1)){ //        step 10, AIN-1 -> current
-        printf("ADC step 10 init failed: (%s)\n", io->Errr); return 0;}
-
-    // initialize global parameters
-    samp =  (io->ESize >> 1) / NoStep;  //!< The number of samples, use all ERam
-    maxInd = samp * NoStep;  //!< The maximum index in the ring buffer.
-
-    if (pruio_config(io, samp, mask, tmr, 4)){ //       configure driver
-    printf("config failed (%s)\n", io->Errr); return 0;}
-
-    if (pruio_rb_start(io)){ //                                start ADC
-    printf("rb_start failed (%s)\n", io->Errr); return 0;}
-
-    return 1;
+    sampler.cleanUp();
 }
 
 
@@ -126,16 +115,11 @@ int main(int argc, char **argv)
     signal(SIGABRT, signalHandler);
     signal(SIGTERM, signalHandler);
 
-    io = pruio_new(PRUIO_DEF_ACTIVE, 0, 0, 0); //! create new driver
-    if (io->Errr){
-        printf("constructor failed (%s)\n", io->Errr); return 1;}
+//    printf("Entered main\n");
+    if( !sampler.ok() ) { cleanUp(); return 1; }
+//    printf("Sampler ok.\n");
 
-    if( !initADC() ) { cleanUp(); return 1; }
-
-
-
-    uint32 a, e; //!< index of start and end of related ring buffer area
-    uint32 n;    //!< tests counter
+    //uint32 a, e; //!< index of start and end of related ring buffer area
     uint16 volt_1 = 1800; //!< stop charging (= Volt * 65520 / 1.8)
     uint16 volt_2 = 10; //!< stop discharging
 
@@ -147,55 +131,87 @@ int main(int argc, char **argv)
     usleep( 1000000 );
     stopDischarge();
 
-    //pwm_duty = 5;
-    startCharge();
+    printf("run, injoules, outjoules, perc\n");
 
-    for(n = 0; n < 100; n++)
+
+    for(int n = 0; n < 100; n++)
     {
-        v_max = 0;
+//        printf("Start charging.\n");
 
+        startCharge();
+
+        v_max = 0;
         do { //                               wait for end of charge cycle
-            a = io->DRam[0] & 0xfffe; // only even indexes from AIN0
-            v_val = io->Adc->Value[a];
-            if( v_val > v_max)
+            if( sampler.getSamples() )
             {
-                v_max = v_val;
-//                printf("%d\n",v_val);
+                v_val = sampler.volt( sampler.lastIdx() );
+                if( v_val > v_max)
+                {
+                    v_max = v_val;
+//                    printf("%d\n",v_val);
+                }
             }
+            else
+            {
+                if( ! sampler.ok() )
+                    { printf("Sampler error (%s)\n", sampler.errMsg()); return 1;}
+                else
+                    printf("No samples fetched....\n");
+            }
+
+            usleep(50); // At 50 us, we will fetch about 10 samples 
         } while(v_val < volt_1);
 
-        printf("V_max: %d\n",v_val);
+//        printf("V_max: %d\n",v_val);
 
         stopCharge();
         startDischarge();
 
-        do { //                            wait for end of discharge cycle
-            e = io->DRam[0] & 0xfffe; // only even indexes from AIN0
-        } while(io->Adc->Value[e] > volt_2);
+        do { //                               wait for end of charge cycle
+            if( sampler.getSamples() )
+            {
+                v_val = sampler.volt( sampler.nrSamples() );
+                if( v_val > v_max)
+                {
+                    v_max = v_val;
+                //                printf("%d\n",v_val);
+                }
+            }
+            usleep(50); // At 50 us, we will fetch about 10 samples 
+        } while(v_val > volt_2);
 
         stopDischarge();
 
+        // Compute in/out Joules from buffer
+        
+        float inJoules = 0, outJoules = 0;
 
-        //                     compute buffer (in case of overflow: e < a)
-        float dPow = 0, inJoules = 0, outJoules = 0;
-        uint32 c;
-        for(c = (e > a ? e - a : maxInd - a + e); c > 0; c--)
+        for( uint32 idx=startChrgIdx; idx<stopChrgIdx; idx++)
         {
-            float Volt = io->Adc->Value[a];     // scale and offset here
-            float Curr = io->Adc->Value[a + 1]; // scale and offset here
+            float volt = ((float)sampler.volt(idx))/60.0f;
+            float curr = sampler.getCurrent(idx);
 
-            dPow = Curr * Volt * tmr * 1e-9;
-            if ( dPow >= 0 ) inJoules += dPow;
-            else            outJoules += dPow;
+            float dPow = curr * volt * sampler.period();
+            inJoules += dPow;
+        }
 
-            a += io->Adc->ChAz;
-            if (a >= maxInd) a -= maxInd;
-        };
+        for( uint32 idx=startDischrgIdx; idx<stopDischrgIdx; idx++)
+        {
+            float volt = ((float)sampler.volt(idx))/60.0f;
+            float curr = sampler.getCurrent(idx);
 
-        printf("Joules in : %f\n",inJoules);
-        printf("Joules out: %f\n",outJoules);
+            float dPow = curr * volt * sampler.period();
+            outJoules += dPow;
+        }
+        outJoules *= -1.0f;
 
-        pwm_freq += 100; //                                   set new frequency
+//        printf("Joules in  : %f\n",inJoules);
+//        printf("Joules out : %f\n",outJoules);
+//        printf("Perc out/in: %f\n",100.0f*outJoules/inJoules);
+
+        printf("%d, %f, %f, %f\n",n,inJoules,outJoules,100.0f*outJoules/inJoules);
+
+//        pwm_freq += 100; //                                   set new frequency
         usleep( 1000000 );
         startCharge();
     }
