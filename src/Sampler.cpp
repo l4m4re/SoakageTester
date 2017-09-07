@@ -22,6 +22,7 @@ Compile by:
 using namespace std;
 
 
+static uint32 io_head=0, io_tail=0;
 
 Sampler::Sampler() 
     : io( pruio_new(PRUIO_DEF_ACTIVE, 0, 0, 0) ) //! create new driver
@@ -33,7 +34,7 @@ Sampler::Sampler()
     , io_mask(3 << 9)  //!< The active steps bitmaks (9 and 10).
     , io_bufSize((io->ESize >> 1) / io_nrSteps) //!< Max number of samples,
                                                      //   use all ERam
-//    , maxInd(io_bufSize / io_nrSteps) //!< The maximum index in the ring buffer.
+    , maxInd(io_bufSize * io_nrSteps) //!< The maximum index in the ring buffer.
 {
     if (io->Errr){
         printf("constructor failed (%s)\n", io->Errr); return;}
@@ -52,6 +53,9 @@ Sampler::Sampler()
 
     strcpy( _errMsg, "");
 
+    io_head=0;
+    io_tail=0;
+
     _ok = true;
 }
 
@@ -65,6 +69,42 @@ void Sampler::cleanUp()
 {
     if( io ) pruio_destroy(io);
     io = 0;
+}
+
+#define __DEBUG__
+
+#ifdef __DEBUG__
+#define DEBUGBUFSIZE 10000
+    static uint32 _totNrSamp[DEBUGBUFSIZE];
+    static uint32 _nsamples[DEBUGBUFSIZE];
+    static uint32 _ioheads[DEBUGBUFSIZE];
+    static uint32 _iotails[DEBUGBUFSIZE];
+    static uint32 _iotails2[DEBUGBUFSIZE];
+    static uint32 _iotails3[DEBUGBUFSIZE];
+    static uint32 _sidx=0;
+
+void printDebugInfo()
+{
+    printf("---Sampler debug begin ----\n");
+    printf("TotNrSamp, nsamples, ioheads, iotails, iotails2, iotails3\n");
+    for( uint32 idx=0; idx<_sidx; idx++)
+        printf("%d, %d, %d, %d, %d, %d\n"
+            ,_totNrSamp[idx], _nsamples[idx], _ioheads[idx], _iotails[idx]
+            , _iotails2[idx], _iotails3[idx]);
+
+    printf("---Sampler debug end   ----\n");
+}    
+#endif  // __DEBUG__
+
+
+void Sampler::reset()
+{
+    _nrSamples = 0;
+    io_tail=io_head;
+
+#ifdef __DEBUG__
+    _sidx=0;
+#endif
 }
 
 /* Typical zero current calibration result:
@@ -108,88 +148,83 @@ float Sampler::getCurrent( uint32 idx )
     return 0.0f;
 }
 
-//#define __DEBUG__
 #define nrAdcSteps (io->Adc->ChAz)
+
 int Sampler::getSamples()
 {
 
-#ifdef __DEBUG__
-    static uint32 _nsamples[1024];
-    static uint32 _ioheads[1024];
-    static uint32 _iotails[1024];
-    static uint32 _iotails2[1024];
-    static uint32 _iotails3[1024];
-    static uint32 _sidx=0;
-#endif    
-
-    static uint32 io_head=0, io_tail=0;
-
     uint32 lastsample = io->DRam[0];
-    io_head = lastsample & 0xfffe; // only even indexes from AIN0 == voltage
+//    io_head = lastsample & 0xfffe; // only even indexes from AIN0 == voltage
+
+    if(((lastsample >> 1) << 1) == lastsample)
+        //even
+        io_head = lastsample;
+    else
+        //odd
+        io_head = lastsample>=1 ? lastsample-1 : 0;
+
 
 //    uint32 nrSamples = ( io_head>io_tail ? (io_head-io_tail)/2
 //                                         : (maxInd-io_tail+io_head)/2 );
 
-    uint32 nrSamples = ( io_head>io_tail ? (io_head-io_tail)/2
-                                         : (io_bufSize-io_tail+io_head)/2 );
+    uint32 nrsamp2get = ( io_head>io_tail ? (io_head-io_tail)/2
+                                         : (maxInd-io_tail+io_head)/2 );
 
 #ifdef __DEBUG__
-    if( _sidx<1024)
+    if( _sidx<DEBUGBUFSIZE)
     {
         _ioheads[_sidx] = io_head;
         _iotails[_sidx] = io_tail;
         _iotails2[_sidx] = 1234;
         _iotails3[_sidx] = 5678;
-        _nsamples[_sidx++]=nrSamples;
+        _nsamples[_sidx]=nrsamp2get;
+        _totNrSamp[_sidx++]=_nrSamples;
     }
 #endif
 
-    if( _nrSamples + nrSamples > SamplerBufSize )
+    if( _nrSamples + nrsamp2get > SamplerBufSize )
     {
         //strcpy( _errMsg, "Sampler buffer overflow.");
         sprintf( _errMsg,
                  "Buffer will overflow when adding %d samples. \n Buffer Size now: %d.",
-                 nrSamples,_nrSamples
+                 nrsamp2get,_nrSamples
                );
-#ifdef __DEBUG__
-//        printf("maxInd: %d \n", maxInd);
-        printf("io_bufSize  : %d \n", io_bufSize);
-        printf("nrAdcSteps: %d \n", nrAdcSteps);
-        printf("Samples taken:\n");
-        for( uint32 idx=0; idx<_sidx; idx++)
-            printf(" %d: %d, %d, %d, %d, %d\n",
-                    idx, _nsamples[idx], _ioheads[idx],
-                    _iotails[idx],_iotails2[idx], _iotails3[idx]);
-#endif        
+
         _ok = false;
         return 0;
     }
-
+/*
     if( io_head == lastsample ) // last sample misses current measurement
     {
-       if( nrSamples <= 1
+       if( nrsamp2get <= 1
            || io_head < nrAdcSteps // Don't bother handling overflow here. 
          ) return 0;
 
-       io_head -= nrAdcSteps; 
-       nrSamples--;
+       //io_head -= nrAdcSteps; 
+       nrsamp2get--;
     }
+*/
+// just leave out the last sample. Will get that one next time..
+    if (nrsamp2get <= 2) return 0;
+    nrsamp2get--;
+
+
 #ifdef __DEBUG__
-    if( _sidx<1024) { _iotails2[_sidx-1] = io_tail; }
+    if( _sidx<DEBUGBUFSIZE) { _iotails2[_sidx-1] = io_tail; }
 #endif
-    for(uint32 cnt = nrSamples; cnt > 0; cnt--)
+    for(uint32 cnt = 0; cnt < nrsamp2get; cnt++)
     {
         _volt[_nrSamples] = io->Adc->Value[io_tail];   
         _curr[_nrSamples] = io->Adc->Value[io_tail + 1];
 
         io_tail += nrAdcSteps;
-//        if (io_tail >= maxInd) { io_tail -= maxInd; }
-        if (io_tail >= io_bufSize) { io_tail -= io_bufSize; }
+        if (io_tail >= maxInd) { io_tail -= maxInd; }
+//        if (io_tail >= io_bufSize) { io_tail -= io_bufSize; }
 
         _nrSamples++;
     }
 #ifdef __DEBUG__
-    if( _sidx<1024) { _iotails3[_sidx-1] = io_tail; }
+    if( _sidx<DEBUGBUFSIZE) { _iotails3[_sidx-1] = io_tail; }
 #endif
-    return nrSamples;
+    return nrsamp2get;
 }

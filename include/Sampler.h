@@ -44,12 +44,18 @@ class Sampler {
 
     int             getSamples();
     void            cleanUp();
-    void            reset()         { _nrSamples=0; }
+    void            reset();
 
     inline bool     ok()            { return _ok; }
     inline uint32   nrSamples()     { return _nrSamples; }
     inline uint32   lastIdx()       
                         { return _nrSamples>0 ? _nrSamples-1 :_nrSamples; }
+
+    inline uint32   getSamplesNGetLastIdx()
+                    {
+                        getSamples();
+                        return lastIdx();
+                    }       
 
     inline float    period()        { return io_tmr * 1e-9; }
 
@@ -85,7 +91,7 @@ class Sampler {
                             // (must match setStep calls and mask).
     const uint32    io_mask;   //!< The active steps bitmaks (9 and 10).
     const uint32    io_bufSize; //!< The number of samples, use all ERam
-    //const uint32    maxInd; //!< The maximum index in the ring buffer.
+    const uint32    maxInd; //!< The maximum index in the ring buffer.
 
     char            _errMsg[256];
 };

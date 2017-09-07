@@ -1,6 +1,6 @@
 #!/bin/sh
 echo "Building ../bin/SoakTest"
-g++ -Wall -o ../bin/SoakTest SoakTest.cpp Sampler.cpp PWM.cpp GPIO.cpp util.cpp -lpruio -lprussdrv -lpthread -I../include
+g++ -g -Wall -o ../bin/SoakTest SoakTest.cpp Sampler.cpp PWM.cpp GPIO.cpp util.cpp -lpruio -lprussdrv -lpthread -I../include
 #gcc -Wall -o ../bin/CapTest CapTest.c -lpruio -lprussdrv
 
 #echo "Building ../bin/GPIOTest"
