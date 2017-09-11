@@ -20,7 +20,7 @@ Compile by:
 #include <cstdlib> // for exit
 #include"PWM.h"
 
-//#include"GPIO.h"
+#include"GPIO.h"
 //#include "pruio.h"
 //#include "pruio_pins.h"
 
@@ -31,30 +31,17 @@ using namespace std;
 
 //#define PWM_OUT P9_21 // pin for PWM output
 //#define GPO_OUT P9_23 // pin for GPIO output
-//#define GPIO_OUT 49 // GPIO output P9_23
+#define GPIO_OUT 49 // GPIO output P9_23
 
 // P9_21 MUST be loaded as a slot before use
 static PWM           charge_pwm("pwm_test_P9_21.12"); 
 static float         charge_pwm_freq     = 5000;
 static unsigned int  charge_pwm_duration = 25000;  // in ns. 50 ms
 
-// Since the use of a GPIO pin turned out to disable the sampler for some
-// time, a few millisecs, we work around this problem by abusing PWM out P8_19
-// as a GPIO. 
-//
-//static GPIO          _outGPIO(GPIO_OUT);
-
-
-// P8_19 MUST be loaded as a slot before use
-static PWM           discharge_pwm("pwm_test_P8_19.13"); 
-static float         discharge_pwm_period   = 1000; // 1 usec,
-static unsigned int  discharge_pwm_duration = 1000; // 1 usec
-
-//static float         discharge_pwm_period   = 1000000; // 1 msec,
-//static unsigned int  discharge_pwm_duration =  100000; // 500 usec
-
+static GPIO          _outGPIO(GPIO_OUT);
 
 static Sampler       sampler;
+
 
 static uint32        startChrgIdx=0, stopChrgIdx=0, startDischrgIdx=0, stopDischrgIdx=0;
 
@@ -116,16 +103,7 @@ void startDischarge()
     startDischrgIdx = sampler.getSamplesNGetLastIdx();
 
 //    _outGPIO.setDirection(OUTPUT);
-//    _outGPIO.setValue(HIGH);
-
-
-    if(discharge_pwm.isRunning())
-        discharge_pwm.stop();
-
-//    discharge_pwm.setPeriod(discharge_pwm_period);
-//    discharge_pwm.setDutyCycle(discharge_pwm_duration);
-
-    discharge_pwm.run();
+    _outGPIO.setValue(HIGH);
 }
 
 void stopDischarge()
@@ -133,9 +111,7 @@ void stopDischarge()
 //   if (pruio_gpio_setValue(sampler.io, GPO_OUT, 0)) { //     stop discharging
 //       printf("failed discharging stop (%s)\n", sampler.io->Errr); return;}
     
-//    _outGPIO.setValue(LOW);
-
-    discharge_pwm.stop();
+    _outGPIO.setValue(LOW);
 
     stopDischrgIdx = sampler.getSamplesNGetLastIdx();
 }
@@ -192,17 +168,7 @@ int main(int argc, char **argv)
     charge_pwm.stop();
     charge_pwm.setPolarity(PWM::ACTIVE_HIGH);  // using active high PWM
 
-//    _outGPIO.setDirection(OUTPUT);
-//
-    discharge_pwm.setPolarity(PWM::ACTIVE_HIGH);  // using active high PWM
-
-    discharge_pwm.stop();
-
-    discharge_pwm.setPeriod(discharge_pwm_period);
-    discharge_pwm.setDutyCycle(discharge_pwm_duration);
-    discharge_pwm.setPeriod(discharge_pwm_period);
-    discharge_pwm.setDutyCycle(discharge_pwm_duration);
-
+    _outGPIO.setDirection(OUTPUT);
 
 
     //uint32 a, e; //!< index of start and end of related ring buffer area
