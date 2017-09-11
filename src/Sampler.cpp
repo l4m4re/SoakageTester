@@ -26,8 +26,8 @@ static uint32 io_head=0, io_tail=0;
 
 Sampler::Sampler() 
     : io( pruio_new(PRUIO_DEF_ACTIVE, 0, 0, 0) ) //! create new driver
-    , _ok(false)
     , _nrSamples(0)
+    , _ok(false)
     , io_tmr(5000)     //!< The sampling rate in ns (5000 ns -> 200 kHz).
     , io_nrSteps(2)    //!< The number of active ADC steps 
                        // (must match setStep calls and io_mask).
@@ -71,7 +71,7 @@ void Sampler::cleanUp()
     io = 0;
 }
 
-#define __DEBUG__
+//#define __DEBUG__
 
 #ifdef __DEBUG__
 #define DEBUGBUFSIZE 10000
@@ -139,13 +139,9 @@ void Sampler::reset()
 #define current_gain     1.0f/2641.0f
 float Sampler::getCurrent( uint32 idx )
 {
-    if( idx < _nrSamples ) 
-    {
-       float ret = current_gain*((float)_curr[idx]-current_mean);
+    float ret = current_gain*(((float)curr(idx))-current_mean);
 //       if( fabs(ret) < 0.05 ) return 0.0f;
-       return ret;
-    }
-    return 0.0f;
+    return ret;
 }
 
 #define nrAdcSteps (io->Adc->ChAz)
@@ -204,9 +200,11 @@ int Sampler::getSamples()
        nrsamp2get--;
     }
 */
-// just leave out the last sample. Will get that one next time..
-    if (nrsamp2get <= 2) return 0;
-    nrsamp2get--;
+
+
+// just leave out the last few samples. Will get those next time.
+    if (nrsamp2get <= 10) return 0;
+    nrsamp2get-=8;
 
 
 #ifdef __DEBUG__
@@ -214,8 +212,22 @@ int Sampler::getSamples()
 #endif
     for(uint32 cnt = 0; cnt < nrsamp2get; cnt++)
     {
+#ifdef __DEBUG__
+        if( _volt[_nrSamples] != 234 || _curr[_nrSamples] != 234 )
+            { sprintf( _errMsg, "Error: overwriting sample!"); _ok=false; }
+
+        uint16 vlt = io->Adc->Value[io_tail];
+        uint16 cur = io->Adc->Value[io_tail+1];
+
+        _volt[_nrSamples] = vlt;
+        _curr[_nrSamples] = cur;
+
+        if( _volt[_nrSamples] == 0 && _curr[_nrSamples] == 0 )
+            { sprintf( _errMsg, "Error: curr&volt both 0."); _ok=false; }
+#else
         _volt[_nrSamples] = io->Adc->Value[io_tail];   
         _curr[_nrSamples] = io->Adc->Value[io_tail + 1];
+#endif
 
         io_tail += nrAdcSteps;
         if (io_tail >= maxInd) { io_tail -= maxInd; }

@@ -12,7 +12,7 @@ Compile by:
 
 //#include "unistd.h"
 //#include "time.h"
-//#include "stdio.h"
+#include "stdio.h"
 //#include "pruio.h"
 //#include "pruio_pins.h"
 
@@ -34,7 +34,8 @@ typedef float float_t;         //!< float data type.
  }
 #endif /* __cplusplus */
 
-#define SamplerBufSize 10*200000  // about 10 seconds
+//#define SamplerBufSize 10*200000  // about 10 seconds
+#define SamplerBufSize 10*2000000  // about 100 seconds
 
 class Sampler {
   public:
@@ -62,28 +63,62 @@ class Sampler {
 //    float           getVolt( uint32 idx );
     float           getCurrent( uint32 idx );
 
-    inline uint32   volt( uint32 idx )
+    inline uint16   volt( uint32 idx )
                     { 
                         if( idx < _nrSamples ) return _volt[idx];
+/* DEBUG
+                        { 
+                            uint16 ret = _volt[idx];
+                            if( ret==234 )
+                            {
+                                sprintf( _errMsg, "Uninitialized volt value.\n");
+                                _ok = false;
+                                return 0;
+                            }
+
+                            return ret;
+                        }
+*/
+
+                        sprintf( _errMsg, "Out of range error.\n");
+                        _ok = false;
                         return 0;
                     }
-    inline uint32   curr( uint32 idx )
+    inline uint16   curr( uint32 idx )
                     { 
                         if( idx < _nrSamples ) return _curr[idx];
+/* DEBUG
+                        { 
+                            uint16 ret = _curr[idx];
+                            if( ret==234 )
+                            {
+                                sprintf( _errMsg, "Uninitialized current value.\n");
+                                _ok = false;
+                                return 0;
+                            }
+
+                            return ret;
+                        }
+*/
+
+                        sprintf( _errMsg, "Out of range error.\n");
+                        _ok = false;
                         return 0;
                     }
 
     const char*     errMsg()       { return _errMsg; }
 
 
+
   private:
 
     pruIo*          io;
-    bool            _ok;
 
     uint32          _nrSamples;
-    uint32          _volt[SamplerBufSize];
-    uint32          _curr[SamplerBufSize];
+    uint16          _volt[SamplerBufSize];
+    uint16          _curr[SamplerBufSize];
+
+    bool            _ok;
 
     // pruio ADC parameters
     const uint32    io_tmr;    //!< The sampling rate in ns (5000 ns -> 200 kHz).

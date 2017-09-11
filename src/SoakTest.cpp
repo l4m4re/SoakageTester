@@ -19,22 +19,41 @@ Compile by:
 #include <csignal>
 #include <cstdlib> // for exit
 #include"PWM.h"
-#include"GPIO.h"
+
+//#include"GPIO.h"
+//#include "pruio.h"
+//#include "pruio_pins.h"
+
 #include"Sampler.h"
 
 using namespace exploringBB;
 using namespace std;
 
-#define PWM_OUT P9_21 // pin for PWM output
-
+//#define PWM_OUT P9_21 // pin for PWM output
 //#define GPO_OUT P9_23 // pin for GPIO output
-#define GPIO_OUT 49 // GPIO output P9_23
+//#define GPIO_OUT 49 // GPIO output P9_23
+
+// P9_21 MUST be loaded as a slot before use
+static PWM           charge_pwm("pwm_test_P9_21.12"); 
+static float         charge_pwm_freq     = 5000;
+static unsigned int  charge_pwm_duration = 25000;  // in ns. 50 ms
+
+// Since the use of a GPIO pin turned out to disable the sampler for some
+// time, a few millisecs, we work around this problem by abusing PWM out P8_19
+// as a GPIO. 
+//
+//static GPIO          _outGPIO(GPIO_OUT);
 
 
-static PWM           _pwm("pwm_test_P9_21.12");  // P9_21 MUST be loaded as a slot before use
-static float         pwm_freq = 5000;
-static unsigned int  pwm_duration = 50000;  // in ns. 5 ms
-static GPIO          _outGPIO(GPIO_OUT);
+// P8_19 MUST be loaded as a slot before use
+static PWM           discharge_pwm("pwm_test_P8_19.13"); 
+static float         discharge_pwm_period   = 1000; // 1 usec,
+static unsigned int  discharge_pwm_duration = 1000; // 1 usec
+
+//static float         discharge_pwm_period   = 1000000; // 1 msec,
+//static unsigned int  discharge_pwm_duration =  100000; // 500 usec
+
+
 static Sampler       sampler;
 
 static uint32        startChrgIdx=0, stopChrgIdx=0, startDischrgIdx=0, stopDischrgIdx=0;
@@ -42,7 +61,6 @@ static uint32        startChrgIdx=0, stopChrgIdx=0, startDischrgIdx=0, stopDisch
 
 void sleepNSample(__useconds_t usecs)
 {   
-/*
     const __useconds_t period=1000; // At 1000 us, we will fetch about 200 samples 
     __useconds_t time_left = usecs;
 
@@ -52,14 +70,15 @@ void sleepNSample(__useconds_t usecs)
         usleep(period);
         sampler.getSamples();
     }
-    if( time_left > 1 )
+    if( time_left > 10 )
     {
         usleep(period);
         sampler.getSamples();
     }
-*/
+/*
     usleep(usecs);
     sampler.getSamples();
+*/
 }
 
 
@@ -67,43 +86,56 @@ void sleepNSample(__useconds_t usecs)
 
 void startCharge()
 {
-    if(_pwm.isRunning())
-        _pwm.stop();
+    if(charge_pwm.isRunning())
+        charge_pwm.stop();
 
-    _pwm.setPolarity(PWM::ACTIVE_HIGH);  // using active high PWM
-    _pwm.setFrequency(pwm_freq);      // Set the period as a frequency
-    _pwm.setDutyCycle(pwm_duration);
+    charge_pwm.setFrequency(charge_pwm_freq);      // Set the period as a frequency
+    charge_pwm.setDutyCycle(charge_pwm_duration);
 
     startChrgIdx = sampler.getSamplesNGetLastIdx();
-    _pwm.run();
+    charge_pwm.run();
 
 }
 
 void stopCharge()
 {
-    //      if (pruio_pwm_setValue(io, PWM_OUT, freq, 0.0)) { // stop charging
+    //      if (pruiocharge_pwm_setValue(io, PWM_OUT, freq, 0.0)) { // stop charging
     //                printf("failed stoping @PWM (%s)\n", io->Errr); break;}
 
-    if(_pwm.isRunning())
-        _pwm.stop();
+    if(charge_pwm.isRunning())
+        charge_pwm.stop();
 
     stopChrgIdx = sampler.getSamplesNGetLastIdx();
 }
 
 void startDischarge()
 {
+//    if (pruio_gpio_setValue(sampler.io, GPO_OUT, 1)) { //     stop discharging
+//        printf("failed discharging stop (%s)\n", sampler.io->Errr); return;}
+
     startDischrgIdx = sampler.getSamplesNGetLastIdx();
 
-    _outGPIO.setDirection(OUTPUT);
-    _outGPIO.setValue(HIGH);
+//    _outGPIO.setDirection(OUTPUT);
+//    _outGPIO.setValue(HIGH);
+
+
+    if(discharge_pwm.isRunning())
+        discharge_pwm.stop();
+
+//    discharge_pwm.setPeriod(discharge_pwm_period);
+//    discharge_pwm.setDutyCycle(discharge_pwm_duration);
+
+    discharge_pwm.run();
 }
 
 void stopDischarge()
 {
-    //if (pruio_gpio_setValue(io, GPO_OUT, 0)) { //     stop discharging
-    //printf("failed discharging stop (%s)\n", io->Errr); break;}
+//   if (pruio_gpio_setValue(sampler.io, GPO_OUT, 0)) { //     stop discharging
+//       printf("failed discharging stop (%s)\n", sampler.io->Errr); return;}
     
-    _outGPIO.setValue(LOW);
+//    _outGPIO.setValue(LOW);
+
+    discharge_pwm.stop();
 
     stopDischrgIdx = sampler.getSamplesNGetLastIdx();
 }
@@ -157,15 +189,34 @@ int main(int argc, char **argv)
     if( !sampler.ok() ) { cleanUp(); return 1; }
 //    printf("Sampler ok.\n");
 
+    charge_pwm.stop();
+    charge_pwm.setPolarity(PWM::ACTIVE_HIGH);  // using active high PWM
+
+//    _outGPIO.setDirection(OUTPUT);
+//
+    discharge_pwm.setPolarity(PWM::ACTIVE_HIGH);  // using active high PWM
+
+    discharge_pwm.stop();
+
+    discharge_pwm.setPeriod(discharge_pwm_period);
+    discharge_pwm.setDutyCycle(discharge_pwm_duration);
+    discharge_pwm.setPeriod(discharge_pwm_period);
+    discharge_pwm.setDutyCycle(discharge_pwm_duration);
+
+
+
     //uint32 a, e; //!< index of start and end of related ring buffer area
     //uint16 volt_1 = 1800; //!< stop charging (= Volt * 65520 / 1.8)
     uint16 volt_1 = 1600; //!< stop charging (= Volt * 65520 / 1.8)
-    uint16 volt_2 = 10; //!< stop discharging
+    uint16 volt_2 = 100; //!< stop discharging
 
     uint16 v_max = 0;
     uint16 v_val = 0;
 
-    _outGPIO.setDirection(OUTPUT);
+//    if (pruio_gpio_setValue(sampler.io, GPO_OUT, 0)) { //         configure GPIO
+//         printf("setValue @GPO_OUT error (%s)\n", sampler.io->Errr); return 1;}
+             
+
     startDischarge();
     usleep( 1000000 );
     stopDischarge();
@@ -178,19 +229,23 @@ int main(int argc, char **argv)
     {
 //        printf("Start charging.\n");
         sampler.reset();
-        sleepNSample( 1000 ); // 10 msec
+        sleepNSample( 1000 ); // 1 msec
 
         startCharge();
 
-        v_max = 0;
+        const uint32 n_smp=32;
+
+        bool done=false;
         do { //                               wait for end of charge cycle
             if( sampler.getSamples() )
             {
-                v_val = sampler.volt( sampler.lastIdx() );
-                if( v_val > v_max)
+                done = true;
+
+                for( uint32 cnt=0; cnt < n_smp; cnt++ )
                 {
-                    v_max = v_val;
-//                    printf("%d\n",v_val);
+                    v_val = sampler.volt( sampler.lastIdx()-cnt );
+
+                    if (v_val <= volt_1) { done=false; break;}
                 }
             }
             else
@@ -202,38 +257,52 @@ int main(int argc, char **argv)
             }
 
             usleep(500); // At 500 us, we will fetch about 100 samples 
-        } while(v_val < volt_1);
+        } while( !done );
 
 //        printf("V_max: %d\n",v_val);
 
         stopCharge();
 
-        sleepNSample( 10000 ); // 10 msec
+        sleepNSample( 1000 ); // 1 msec
 
         startDischarge();
 
-        do { //                               wait for end of charge cycle
+
+        done=false;
+        do { //                               wait for end of discharge cycle
             if( sampler.getSamples() )
             {
-                v_val = sampler.volt( sampler.nrSamples() );
-                if( v_val > v_max)
+                done = true;
+
+                for( uint32 cnt=0; cnt < n_smp; cnt++ )
                 {
-                    v_max = v_val;
-                //                printf("%d\n",v_val);
+                    v_val = sampler.volt( sampler.lastIdx()-cnt );
+
+                    if (v_val >= volt_2) { done=false; break;}
                 }
             }
-            usleep(500); // At 500 us, we will fetch about 100 samples 
-        } while(v_val > volt_2);
+            else
+            {
+                if( ! sampler.ok() )
+                    { printf("Sampler error (%s)\n", sampler.errMsg()); return 1;}
+                else
+                    printf("No samples fetched....\n");
+            }
 
-        sleepNSample( 10000 ); // 10 msec
+            usleep(500); // At 500 us, we will fetch about 100 samples 
+        } while( !done );
+
+
+
+//        sleepNSample( 10000 ); // 10 msec
 
         stopDischarge();
 
-        sleepNSample( 10000 ); // 10 msec
+        sleepNSample( 100000 ); // 100 msec
 
         buf2file("/data/arend/work/SoakageTester/bin/buf.log");
-        sleepNSample( 1000 ); // 1 msec
-        buf2file("/data/arend/work/SoakageTester/bin/buf2.log");
+//        sleepNSample( 1000 ); // 1 msec
+//        buf2file("/data/arend/work/SoakageTester/bin/buf2.log");
 
         // Compute in/out Joules from buffer
         
@@ -316,14 +385,15 @@ int main(int argc, char **argv)
 
         printf("%d, %f, %f, %f\n",n,inJoules,outJoules,100.0f*outJoules/inJoules);
 
-//        pwm_freq += 100; //                                   set new frequency
-    }
+//        charge_pwm_freq += 100; //                                   set new frequency
 
-    if( ! sampler.ok() )
-    { 
-        printf("Sampler error (%s)\n", sampler.errMsg());
-        cleanUp(); 
-        return 1;
+
+        if( ! sampler.ok() )
+        { 
+            printf("Sampler error (%s)\n", sampler.errMsg());
+            cleanUp(); 
+            return 1;
+        }
     }
 
     cleanUp();
