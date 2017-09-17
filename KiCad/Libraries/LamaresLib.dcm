@@ -48,6 +48,11 @@ D Dual Jumper, normally closed
 K jumper bridge link nc
 $ENDCMP
 #
+$CMP L
+D Inductor
+K inductor choke coil reactor magnetic
+$ENDCMP
+#
 $CMP MPSA42
 D Vce 300V, Ic 500mA, NPN High Voltage Transistor, TO-92
 K NPN High Voltage Transistor
