@@ -13,6 +13,7 @@ Compile by:
 //#include "unistd.h"
 //#include "time.h"
 #include "stdio.h"
+
 //#include "pruio.h"
 //#include "pruio_pins.h"
 
@@ -37,6 +38,8 @@ typedef float float_t;         //!< float data type.
 //#define SamplerBufSize 10*200000  // about 10 seconds
 #define SamplerBufSize 10*2000000  // about 100 seconds
 
+unsigned long timeStamp();
+
 class Sampler {
   public:
 
@@ -49,6 +52,8 @@ class Sampler {
 
     inline bool     ok()            { return _ok; }
     inline uint32   nrSamples()     { return _nrSamples; }
+    inline float    period()        { return io_tmr * 1e-9; }
+
     inline uint32   lastIdx()       
                         { return _nrSamples>0 ? _nrSamples-1 :_nrSamples; }
 
@@ -58,27 +63,15 @@ class Sampler {
                         return lastIdx();
                     }       
 
-    inline float    period()        { return io_tmr * 1e-9; }
 
-//    float           getVolt( uint32 idx );
+    void            sleepNSample(unsigned long usecs);
+
+    float           getVoltage( uint32 idx );
     float           getCurrent( uint32 idx );
 
     inline uint16   volt( uint32 idx )
                     { 
                         if( idx < _nrSamples ) return _volt[idx];
-/* DEBUG
-                        { 
-                            uint16 ret = _volt[idx];
-                            if( ret==234 )
-                            {
-                                sprintf( _errMsg, "Uninitialized volt value.\n");
-                                _ok = false;
-                                return 0;
-                            }
-
-                            return ret;
-                        }
-*/
 
                         sprintf( _errMsg, "Out of range error.\n");
                         _ok = false;
@@ -87,28 +80,17 @@ class Sampler {
     inline uint16   curr( uint32 idx )
                     { 
                         if( idx < _nrSamples ) return _curr[idx];
-/* DEBUG
-                        { 
-                            uint16 ret = _curr[idx];
-                            if( ret==234 )
-                            {
-                                sprintf( _errMsg, "Uninitialized current value.\n");
-                                _ok = false;
-                                return 0;
-                            }
-
-                            return ret;
-                        }
-*/
 
                         sprintf( _errMsg, "Out of range error.\n");
                         _ok = false;
                         return 0;
                     }
 
+
     const char*     errMsg()       { return _errMsg; }
 
-
+    inline float    currentMean()  { return current_mean; }
+    void            calibrateCurrent();
 
   private:
 
@@ -128,5 +110,6 @@ class Sampler {
     const uint32    io_bufSize; //!< The number of samples, use all ERam
     const uint32    maxInd; //!< The maximum index in the ring buffer.
 
+    float           current_mean;
     char            _errMsg[256];
 };

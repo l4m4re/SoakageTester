@@ -1,11 +1,11 @@
 #!/bin/sh
 echo "Building ../bin/SoakTest"
-g++ -g -Wall -o ../bin/SoakTest SoakTest.cpp Sampler.cpp PWM.cpp GPIO.cpp util.cpp -lpruio -lprussdrv -lpthread -I../include
+g++ -g -Wall -o ../bin/SoakTest SoakTest.cpp Sampler.cpp PWM.cpp GPIO.cpp Biquad.cpp util.cpp -lpruio -lprussdrv -lpthread -I../include
 
 #g++ -g -Wall -o ../bin/SoakTest SoakTest.cpp Sampler.cpp PWM.cpp util.cpp -lpruio -lprussdrv -lpthread -I../include
 #gcc -Wall -o ../bin/CapTest CapTest.c -lpruio -lprussdrv
 
 #echo "Building ../bin/GPIOTest"
 #g++ -Wall -o ../bin/GPIOTest GPIOTest.cpp PWM.cpp GPIO.cpp util.cpp -lpruio -lprussdrv -lpthread
-#echo "Building ../bin/Calibrate"
-#g++ -Wall -o ../bin/Calibrate Calibrate.cpp Sampler.cpp PWM.cpp GPIO.cpp util.cpp -lpruio -lprussdrv -lpthread -I../include
+echo "Building ../bin/Calibrate"
+g++ -g -Wall -o ../bin/Calibrate Calibrate.cpp Sampler.cpp -lpruio -lprussdrv -lpthread -I../include

@@ -10,21 +10,20 @@ Compile by:
 
 */
 
-#include "unistd.h"
+//#include "unistd.h"
 #include "time.h"
 #include "stdio.h"
 
 #include<iostream>
-#include<unistd.h> //for usleep
 #include <csignal>
-#include <cstdlib> // for exit
+#include <cstdlib>  // for exit
+#include <unistd.h> // for usleep
+
 #include"PWM.h"
-
 #include"GPIO.h"
-//#include "pruio.h"
-//#include "pruio_pins.h"
-
 #include"Sampler.h"
+
+#include"Biquad.h"
 
 using namespace exploringBB;
 using namespace std;
@@ -33,43 +32,30 @@ using namespace std;
 //#define GPO_OUT P9_23 // pin for GPIO output
 #define GPIO_OUT 49 // GPIO output P9_23
 
+#define PWM_START_FREQ 500
+#define PWM_STOP_FREQ  35000
 // P9_21 MUST be loaded as a slot before use
 static PWM           charge_pwm("pwm_test_P9_21.12"); 
-static float         charge_pwm_freq     = 5000;
-static unsigned int  charge_pwm_duration = 25000;  // in ns. 50 ms
+static float         charge_pwm_freq     = PWM_START_FREQ;
+//static float         charge_pwm_freq     = 500;
+//static unsigned int  charge_pwm_duration = 1600;  // in ns. About the minimum
+//static unsigned int  charge_pwm_duration = 1750;  // in ns. 
+static unsigned int  charge_pwm_duration = 5000;  // in ns. 5 us
+
+// The switch-off time of the circuitry driving the gate of the MOSFET is in
+// the order of 300 usec, which means we could maximally drive the circuit at
+// about 2 kHz, which is way to slow. 
+//
+// The opto-driver appears to switch off pretty fast, but the MPSA42's don't.
+// Perhaps a base-discharge resistor over these could improve the situation.
 
 static GPIO          _outGPIO(GPIO_OUT);
 
 static Sampler       sampler;
 
 
-static uint32        startChrgIdx=0, stopChrgIdx=0, startDischrgIdx=0, stopDischrgIdx=0;
-
-
-void sleepNSample(__useconds_t usecs)
-{   
-    const __useconds_t period=1000; // At 1000 us, we will fetch about 200 samples 
-    __useconds_t time_left = usecs;
-
-    while( time_left > period)
-    {
-        time_left-=period;
-        usleep(period);
-        sampler.getSamples();
-    }
-    if( time_left > 10 )
-    {
-        usleep(period);
-        sampler.getSamples();
-    }
-/*
-    usleep(usecs);
-    sampler.getSamples();
-*/
-}
-
-
-
+static uint32        startChrgIdx=0, stopChrgIdx=0,
+                     startDischrgIdx=0, stopDischrgIdx=0;
 
 void startCharge()
 {
@@ -134,7 +120,7 @@ void signalHandler( int signum ) {
 }
 
 
-void buf2file(const char* fname)
+void buf2file(const char* fname, double* voltage, double* current)
 {
     FILE * pFile;
 
@@ -142,8 +128,8 @@ void buf2file(const char* fname)
 
     for( uint32 idx=0; idx<sampler.nrSamples(); idx++)
     {
-        float volt = ((float)sampler.volt(idx))/60.0f;
-        float curr = sampler.getCurrent(idx);
+        double volt = voltage[idx];
+        double curr = current[idx];
         fprintf(pFile, "%f, %f\n",volt,curr);
         //fprintf(pFile, "%d, %d\n",sampler.volt(idx),sampler.curr(idx));
     }
@@ -151,9 +137,7 @@ void buf2file(const char* fname)
     fclose (pFile);
 }
 
-void  printDebugInfo();
 
-//! The main function.
 int main(int argc, char **argv)
 {
     // register signal handlers
@@ -161,9 +145,7 @@ int main(int argc, char **argv)
     signal(SIGABRT, signalHandler);
     signal(SIGTERM, signalHandler);
 
-//    printf("Entered main\n");
     if( !sampler.ok() ) { cleanUp(); return 1; }
-//    printf("Sampler ok.\n");
 
     charge_pwm.stop();
     charge_pwm.setPolarity(PWM::ACTIVE_HIGH);  // using active high PWM
@@ -171,31 +153,39 @@ int main(int argc, char **argv)
     _outGPIO.setDirection(OUTPUT);
 
 
-    //uint32 a, e; //!< index of start and end of related ring buffer area
-    //uint16 volt_1 = 1800; //!< stop charging (= Volt * 65520 / 1.8)
-    uint16 volt_1 = 1600; //!< stop charging (= Volt * 65520 / 1.8)
-    uint16 volt_2 = 100; //!< stop discharging
+    float fully_charged_voltage = 27.0f;   //!< stop charging 
+    //float fully_charged_voltage = 7.5f;   //!< stop charging 
+    float fully_discharged_voltage = 0.01f; //!< stop discharging
 
-    uint16 v_max = 0;
-    uint16 v_val = 0;
+    float v_val = 0.0f;
+    float max_perc = 0.0f;
 
 //    if (pruio_gpio_setValue(sampler.io, GPO_OUT, 0)) { //         configure GPIO
 //         printf("setValue @GPO_OUT error (%s)\n", sampler.io->Errr); return 1;}
              
+    sampler.calibrateCurrent();
 
     startDischarge();
-    usleep( 1000000 );
+
+    sampler.sleepNSample( 1000000 ); // 1 sec
+
     stopDischarge();
 
+//    sampler.calibrateCurrent();
 
-    printf("run, injoules, outjoules, perc\n");
 
+    printf("run, freq, injoules, outjoules, perc, sampler_current_mean\n");
 
-    for(int n = 0; n < 1000; n++)
+    uint32 n=1;
+    for(;;)
     {
+//        float v_max = 0;
+//        float v_min = 65000;
+
 //        printf("Start charging.\n");
         sampler.reset();
-        sleepNSample( 1000 ); // 1 msec
+        sampler.sleepNSample( 100 ); // 100 usec
+//        sampler.calibrateCurrent();
 
         startCharge();
 
@@ -209,9 +199,16 @@ int main(int argc, char **argv)
 
                 for( uint32 cnt=0; cnt < n_smp; cnt++ )
                 {
-                    v_val = sampler.volt( sampler.lastIdx()-cnt );
+                    v_val = sampler.getVoltage( sampler.lastIdx()-cnt );
+/*
+                    if( v_val > v_max)
+                    {
+                        v_max = v_val;
+                        printf("Max voltage: %d\n", v_max);
+                    }
+*/
 
-                    if (v_val <= volt_1) { done=false; break;}
+                    if (v_val <= fully_charged_voltage) { done=false; break;}
                 }
             }
             else
@@ -225,14 +222,17 @@ int main(int argc, char **argv)
             usleep(500); // At 500 us, we will fetch about 100 samples 
         } while( !done );
 
-//        printf("V_max: %d\n",v_val);
+//        printf("V_max: %d\n",v_max);
 
         stopCharge();
 
-        sleepNSample( 1000 ); // 1 msec
+//        sampler.sleepNSample( 1000 ); // 1 msec
+        sampler.sleepNSample( 50000 ); // 50 msec
+//        sampler.calibrateCurrent();
+
+//        printf("Start discharging.\n");
 
         startDischarge();
-
 
         done=false;
         do { //                               wait for end of discharge cycle
@@ -242,9 +242,16 @@ int main(int argc, char **argv)
 
                 for( uint32 cnt=0; cnt < n_smp; cnt++ )
                 {
-                    v_val = sampler.volt( sampler.lastIdx()-cnt );
+                    v_val = sampler.getVoltage( sampler.lastIdx()-cnt );
+/*
+                    if( v_val < v_min)
+                    {
+                        v_min = v_val;
+                        printf("Min voltage: %d\n", v_min);
+                    }
+*/
 
-                    if (v_val >= volt_2) { done=false; break;}
+                    if (v_val >= fully_discharged_voltage) { done=false; break;}
                 }
             }
             else
@@ -260,20 +267,51 @@ int main(int argc, char **argv)
 
 
 
-//        sleepNSample( 10000 ); // 10 msec
+//        sampler.sleepNSample( 10000 ); // 10 msec
 
         stopDischarge();
 
-        sleepNSample( 100000 ); // 100 msec
+        sampler.sleepNSample( 10000 ); // 10 msec
+        sampler.calibrateCurrent();
 
-        buf2file("/data/arend/work/SoakageTester/bin/buf.log");
-//        sleepNSample( 1000 ); // 1 msec
-//        buf2file("/data/arend/work/SoakageTester/bin/buf2.log");
 
         // Compute in/out Joules from buffer
         
-        float inJoules = 0, outJoules = 0;
-        int stage=0;
+        double inJoules = 0, outJoules = 0;
+//        int stage=0;
+
+
+
+        uint32 nsamples = sampler.nrSamples();
+        double* voltage = new double[nsamples];
+        double* current = new double[nsamples];
+
+        for( uint32 idx=0; idx<nsamples; idx++)
+        {
+            voltage[idx] = sampler.getVoltage(idx);
+            current[idx] = sampler.getCurrent(idx);
+        }
+
+
+        Biquad* volt_lpFilter = new Biquad();    // create a Biquad, lpFilter;
+        Biquad* curr_lpFilter = new Biquad();    // create a Biquad, lpFilter;
+
+#define Fc           30000.0
+#define sampleRate  200000.0 
+
+        volt_lpFilter->setBiquad(bq_type_lowpass, Fc / sampleRate, 0.707, 0);
+        curr_lpFilter->setBiquad(bq_type_lowpass, Fc / sampleRate, 0.707, 0);
+
+        // filter a buffer of input samples, in-place
+        for (uint32 idx = 0; idx < nsamples; idx++) 
+        {
+            voltage[idx] = volt_lpFilter->process(voltage[idx]);
+            current[idx] = curr_lpFilter->process(current[idx]);
+        }
+
+        delete volt_lpFilter;
+        delete curr_lpFilter;
+
 
 //define PRINT_OUTPUT
 
@@ -281,8 +319,8 @@ int main(int argc, char **argv)
         printf("-- start  --\n");
         for( uint32 idx=0; idx<startChrgIdx; idx++)
         {
-            float volt = ((float)sampler.volt(idx))/60.0f;
-            float curr = sampler.getCurrent(idx);
+            double volt = voltage[idx];
+            double curr = current[idx];
             printf("%f, %f, %d\n",volt,curr,stage);
         }
 
@@ -291,13 +329,14 @@ int main(int argc, char **argv)
 #endif
         for( uint32 idx=startChrgIdx; idx<stopChrgIdx; idx++)
         {
-            float volt = ((float)sampler.volt(idx))/60.0f;
-            float curr = sampler.getCurrent(idx);
+            double volt = voltage[idx];
+            double curr = current[idx];
 #ifdef PRINT_OUTPUT        
             printf("%f, %f, %d\n",volt,curr,stage);
 #endif
 
-            float dPow = curr * volt * sampler.period();
+//            double dPow = curr * volt * sampler.period();
+            double dPow = curr * volt / sampleRate;
             inJoules += dPow;
         }
 
@@ -306,8 +345,8 @@ int main(int argc, char **argv)
         printf("-- pause --\n");
         for( uint32 idx=stopChrgIdx; idx<startDischrgIdx; idx++)
         {
-            float volt = ((float)sampler.volt(idx))/60.0f;
-            float curr = sampler.getCurrent(idx);
+            double volt = voltage[idx];
+            double curr = current[idx];
             printf("%f, %f, %d\n",volt,curr,stage);
         }
 
@@ -316,13 +355,14 @@ int main(int argc, char **argv)
 #endif
         for( uint32 idx=startDischrgIdx; idx<stopDischrgIdx; idx++)
         {
-            float volt = ((float)sampler.volt(idx))/60.0f;
-            float curr = sampler.getCurrent(idx);
+            double volt = voltage[idx];
+            double curr = current[idx];
 #ifdef PRINT_OUTPUT        
             printf("%f, %f, %d\n",volt,curr,stage);
 #endif
 
-            float dPow = curr * volt * sampler.period();
+//            double dPow = curr * volt * sampler.period();
+            double dPow = curr * volt / sampleRate;
             outJoules += dPow;
         }
         outJoules *= -1.0f;
@@ -332,14 +372,14 @@ int main(int argc, char **argv)
         printf("-- lead out --\n");
         for( uint32 idx=stopDischrgIdx; idx<sampler.nrSamples(); idx++)
         {
-            float volt = ((float)sampler.volt(idx))/60.0f;
-            float curr = sampler.getCurrent(idx);
+            double volt = voltage[idx];
+            double curr = current[idx];
             printf("%f, %f, %d\n",volt,curr,stage);
         }
 #endif
 
 /*
-        sleepNSample( 10000 );
+        sampler.sleepNSample( 10000 );
 
         printf("-- done --\n");
 
@@ -349,9 +389,34 @@ int main(int argc, char **argv)
         printf("Perc out/in: %f\n",100.0f*outJoules/inJoules);
 */
 
-        printf("%d, %f, %f, %f\n",n,inJoules,outJoules,100.0f*outJoules/inJoules);
 
-//        charge_pwm_freq += 100; //                                   set new frequency
+        float perc = 100.0f*outJoules/inJoules;
+
+
+        printf("%d, %5.2f, %d, %5.4f, %5.4f, %3.4f, %5.4f\n",
+                n, charge_pwm_freq, charge_pwm_duration,
+                inJoules, outJoules, perc,
+                sampler.currentMean());
+
+        if( perc > max_perc && n>10 )
+        {
+            max_perc = perc;
+            printf("Saving best result\n");
+
+            buf2file( "/data/arend/work/SoakageTester/bin/buf.log",
+                      voltage, current);
+        }
+
+        charge_pwm_freq *= 1.01; 
+        //charge_pwm_freq += 10;
+
+        float duty = charge_pwm_duration/(1e9/charge_pwm_freq);
+
+        if( charge_pwm_freq  > PWM_STOP_FREQ || duty > 0.9 )
+        { 
+            charge_pwm_freq = PWM_START_FREQ;
+            charge_pwm_duration += 100;
+        }
 
 
         if( ! sampler.ok() )
@@ -360,6 +425,13 @@ int main(int argc, char **argv)
             cleanUp(); 
             return 1;
         }
+
+        sampler.calibrateCurrent();
+
+        delete[] voltage;
+        delete[] current;
+
+        n++;
     }
 
     cleanUp();

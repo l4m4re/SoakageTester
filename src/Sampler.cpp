@@ -10,7 +10,6 @@ Compile by:
 
 */
 
-//#include "unistd.h"
 //#include "time.h"
 #include "Sampler.h"
 #include "pruio.h"
@@ -18,35 +17,105 @@ Compile by:
 #include "stdio.h"
 #include <string.h>
 #include <math.h>
+#include <unistd.h>   // for usleep
+#include <sys/time.h> // for timestamp
+//#include <iostream>
+//#include <string>
 
 using namespace std;
 
 
 static uint32 io_head=0, io_tail=0;
 
+#include <iostream>
+#include <bitset>
+void printBinary( uint16 i )
+{
+    std::cout << std::bitset<16>(i);
+    std::cout << std::endl;
+}
+
+//#define HIGH_SPEED
+
 Sampler::Sampler() 
-    : io( pruio_new(PRUIO_DEF_ACTIVE, 0, 0, 0) ) //! create new driver
+    : io( pruio_new(PRUIO_ACT_ADC, 0, 0, 0) ) //! create new driver
+      // Only ADC active. For all subsystems use PRUIO_DEF_ACTIVE
     , _nrSamples(0)
     , _ok(false)
-    , io_tmr(5000)     //!< The sampling rate in ns (5000 ns -> 200 kHz).
+#ifdef HIGH_SPEED
+//    , io_tmr(2500)     //!< The sampling rate in ns (2500 ns -> 400 kHz).
+//    , io_tmr(3333)     //!< The sampling rate in ns (3333 ns -> 300 kHz).
+//    , io_tmr(1000)     //!< The sampling rate in ns (2500 ns -> 400 kHz).
+//    , io_tmr(2222)     //!< The sampling rate in ns (2000 ns -> 500 kHz).
+    , io_tmr(5000)   //!< The sampling rate in ns (5000 ns -> 200 kHz).
+#else
+    , io_tmr(5000)   //!< The sampling rate in ns (5000 ns -> 200 kHz).
+                     // This is independent of the number of channels.
+#endif
     , io_nrSteps(2)    //!< The number of active ADC steps 
                        // (must match setStep calls and io_mask).
     , io_mask(3 << 9)  //!< The active steps bitmaks (9 and 10).
     , io_bufSize((io->ESize >> 1) / io_nrSteps) //!< Max number of samples,
                                                      //   use all ERam
     , maxInd(io_bufSize * io_nrSteps) //!< The maximum index in the ring buffer.
+//    , current_mean(2035.8f)
+    , current_mean(1.0f)
 {
     if (io->Errr){
         printf("constructor failed (%s)\n", io->Errr); return;}
 
-    if (pruio_adc_setStep(io,  9, 0, 0, 0, 0)){ //        step 9, AIN-0 -> voltage
-        printf("ADC step 9 init failed: (%s)\n", io->Errr); return;}
+// pruio_adc_setStep documentation:
+//
+// http://users.freebasic-portal.de/tjf/Projekte/libpruio/doc/html/class_adc_udt.html#a243d91f0b7b7a29ada9bc14364c3284f
+//
+// This function is used to adapt a step configuration. In the constructor,
+// steps 1 to 8 get configured for AIN-0 to AIN-7 (other steps stay
+// un-configured). By this function you can customize the default settings and
+// / or configure further steps (input channel number, avaraging and delay
+// values).
+//
+// Parameters
+//     Stp  Step index (0 = step 0 => charge step, 1 = step 1 (=> AIN-0 by
+//          default), ..., 17 = idle step)-
+//     ChN  Channel number to scan (0 = AIN-0, 1 = AIN-1, ...)-
+//     Av   New value for avaraging (defaults to 4)-
+//     SaD  New value for sample delay (defaults to 0)-
+//     OpD  New value for open delay (defaults to 0x98)-
 
-    if (pruio_adc_setStep(io, 10, 1, 0, 0, 1)){ //        step 10, AIN-1 -> current
-        printf("ADC step 10 init failed: (%s)\n", io->Errr); return;}
+//#define USE_AIN_0
 
-    if (pruio_config(io, io_bufSize, io_mask, io_tmr, 4)){ //         configure driver
-        printf("config failed (%s)\n", io->Errr); return;}
+#ifdef HIGH_SPEED
+# define Av  0
+#else
+# define Av  3
+#endif
+#define SaD 0
+#define OpD 1
+
+#ifdef USE_AIN_0
+    printf("Sampler: Using AIN-0 for Voltage\n");
+    if (pruio_adc_setStep(io, 9, 0, Av, SaD, OpD)){
+        // step 9, AIN-0 -> voltage
+        printf("ADC step 1 init failed: (%s)\n", io->Errr); return;}
+#else
+    printf("Sampler: Using AIN-2 for Voltage\n");
+    if (pruio_adc_setStep(io, 9, 2, Av, SaD, OpD)){
+        // step 9, AIN-2 -> voltage
+        printf("ADC step 3 init failed: (%s)\n", io->Errr); return;}
+#endif
+
+    if (pruio_adc_setStep(io, 10, 1, Av, SaD, OpD)){
+        // step 10, AIN-1 -> current
+        printf("ADC step 2 init failed: (%s)\n", io->Errr); return;}
+
+#define mMDS 0 // Bit encoding == shift value
+    if (pruio_config(io, io_bufSize, io_mask, io_tmr, mMDS))
+    { //  configure driver
+        printf("config failed (%s)\n", io->Errr); return;
+    }
+#undef mMDS
+
+//    printf("Io_mask:\t"); printBinary( io_mask );
 
     if (pruio_rb_start(io)){ //                           start ADC
         printf("rb_start failed (%s)\n", io->Errr); return;}
@@ -135,14 +204,24 @@ void Sampler::reset()
     Sample Standard Deviation       :     0.0119
 */
 
-#define current_mean     32529.3f
-#define current_gain     1.0f/2641.0f
+//#define current_mean     1997.7f    // When probe connected to AIN !!
+#define current_gain     1.0f/165.0625f
 float Sampler::getCurrent( uint32 idx )
 {
     float ret = current_gain*(((float)curr(idx))-current_mean);
+//    if( fabs(ret) < 0.02 ) return 0.0f;
+    return ret;
+}
+
+//#define voltage_div     74.15f
+#define voltage_div     73.9f
+float Sampler::getVoltage( uint32 idx )
+{
+    float ret = ((float)volt(idx))/voltage_div;
 //       if( fabs(ret) < 0.05 ) return 0.0f;
     return ret;
 }
+
 
 #define nrAdcSteps (io->Adc->ChAz)
 
@@ -212,22 +291,9 @@ int Sampler::getSamples()
 #endif
     for(uint32 cnt = 0; cnt < nrsamp2get; cnt++)
     {
-#ifdef __DEBUG__
-        if( _volt[_nrSamples] != 234 || _curr[_nrSamples] != 234 )
-            { sprintf( _errMsg, "Error: overwriting sample!"); _ok=false; }
 
-        uint16 vlt = io->Adc->Value[io_tail];
-        uint16 cur = io->Adc->Value[io_tail+1];
-
-        _volt[_nrSamples] = vlt;
-        _curr[_nrSamples] = cur;
-
-        if( _volt[_nrSamples] == 0 && _curr[_nrSamples] == 0 )
-            { sprintf( _errMsg, "Error: curr&volt both 0."); _ok=false; }
-#else
-        _volt[_nrSamples] = io->Adc->Value[io_tail];   
+        _volt[_nrSamples] = io->Adc->Value[io_tail];
         _curr[_nrSamples] = io->Adc->Value[io_tail + 1];
-#endif
 
         io_tail += nrAdcSteps;
         if (io_tail >= maxInd) { io_tail -= maxInd; }
@@ -239,4 +305,168 @@ int Sampler::getSamples()
     if( _sidx<DEBUGBUFSIZE) { _iotails3[_sidx-1] = io_tail; }
 #endif
     return nrsamp2get;
+}
+
+
+unsigned long timeStamp()
+{
+    struct timeval tv;
+    gettimeofday(&tv,NULL);
+    return 1000000 * tv.tv_sec + tv.tv_usec;
+}
+
+
+/*  Arduino:
+ 
+    Use of millis() and rollover
+
+    http://forum.arduino.cc/index.php?topic=122413
+
+    if all your time calculations are done as:
+    
+        if  ((later_time - earlier_time ) >=duration ) {action}
+
+    then the rollover does generally not come into play.
+
+    Q: Are there instances where the rollover does come into play?
+    A: When duration is >= the rollover period.  
+       (Or if you use signed comparison, >= 1/2 the rollover period).
+       
+       
+    https://www.baldengineer.com/arduino-how-do-you-reset-millis.html
+    
+    Avoiding rollover and checking how much time as passed is done in a single line:
+    
+      if ((unsigned long)(millis() - previousMillis) >= interval)
+
+    That single line of code is all that is really needed, to avoid rollover! 
+    
+*/
+
+
+
+void Sampler::sleepNSample(unsigned long usecs)
+{   
+    const __useconds_t period=100; // At 500 us, we will fetch about 20 samples 
+
+    unsigned long start_time = timeStamp();
+    unsigned long elapsed = 0;
+
+    getSamples();
+
+    elapsed = timeStamp() - start_time;
+    while( elapsed <= usecs )
+    {
+        usleep(period);
+        getSamples();
+        elapsed = timeStamp() - start_time;
+    }
+
+    getSamples();
+}
+
+
+class StdDeviation
+{
+// 
+// Adapted from: 
+//
+//    http://www.softwareandfinance.com/CPP/MeanVarianceStdDevi.html
+//
+// There is no explicit license information on the site, but it is intended
+// for educational purposes and contains many tutorials. It is therefore
+// assumed the original author has no objection against re-use and/or
+// re-licensing of this class.
+//
+private:
+
+    uint32   max;
+    double*  value;
+    double   mean;
+
+public:
+
+    StdDeviation(Sampler& sampler, uint32 startidx, uint32 stopidx)
+        : max( stopidx-startidx+1 )
+        , value( new double[max])
+    {
+        uint32 validx=0;
+        for( uint32 idx=startidx; idx<=stopidx; idx++)
+        {
+            value[validx++]= (double)sampler.curr(idx);
+        }
+    }
+
+    StdDeviation(double* values, uint32 nrvals)
+        : max( nrvals )
+        , value( new double[max])
+    {
+        for( uint32 idx=0; idx<nrvals; idx++)
+        {
+            value[idx]= values[idx];
+        }
+    }
+
+
+    ~StdDeviation() { delete value; }
+ 
+
+    double CalculateMean()
+    {
+        double sum = 0;
+
+        for(uint32 i = 0; i < max; i++)
+        {
+            sum += value[i];
+        }
+
+        return (sum / max);
+    }
+
+    double CalculateVariane(double mean)
+    {
+        double temp = 0;
+
+        for(uint32 i = 0; i < max; i++) 
+            { temp += (value[i] - mean) * (value[i] - mean) ; }
+
+        return temp / max;
+    }
+
+    double GetStandardDeviation(double mean)
+        { return sqrt(CalculateVariane(mean)); }
+
+};
+
+#define maxMeans 256
+void Sampler::calibrateCurrent()
+{
+    static double means[maxMeans];
+    static uint32 meansidx    = 0;
+    static bool   meansfilled = false;
+
+//    long sample_time_usecs = 500000; // 0.5 sec
+//    long sample_time_usecs = 5000;  // 5 msec
+    long sample_time_usecs = 10000;  // 10 msec
+
+    getSamples();
+    uint32 startidx = lastIdx();
+    sleepNSample( sample_time_usecs );
+    uint32 stopidx = lastIdx();
+
+    StdDeviation sd(*this, startidx, stopidx);
+
+    means[meansidx++] = sd.CalculateMean();
+    if( meansidx > maxMeans ) { meansidx=0; meansfilled=true;}
+ 
+    if( meansfilled )
+    {
+        StdDeviation sd2(means, maxMeans);
+        current_mean = sd2.CalculateMean();
+    }
+    else
+    {
+        StdDeviation sd2(means, meansidx);
+        current_mean = sd2.CalculateMean();
+    }
 }
