@@ -25,6 +25,12 @@ D Diode, alternativ symbol
 K diode
 $ENDCMP
 #
+$CMP D_Zener_ALT
+D Zener Diode, alternativ symbol
+K diode
+F https://en.wikipedia.org/wiki/Zener_diode
+$ENDCMP
+#
 $CMP IRFB3307
 D 75V Vds, 130A Id, HEXFET N-Channel MOSFET, TO-220
 K HEXFET N-Channel MOSFET
@@ -40,6 +46,11 @@ $ENDCMP
 $CMP Jumper_NC_Dual
 D Dual Jumper, normally closed
 K jumper bridge link nc
+$ENDCMP
+#
+$CMP L
+D Inductor
+K inductor choke coil reactor magnetic
 $ENDCMP
 #
 $CMP MPSA42

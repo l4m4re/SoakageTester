@@ -1,0 +1,42 @@
+50 kHz filter, designed with:
+
+http://www.analog.com/designtools/en/filterwizard/
+
+Slew rate for some opamps:
+
+LM2902N: 0.5 V/us
+AD549  : 3 V/us
+LT1012 : 0.2 V/us typ
+LT1637 : 0.4 V/us
+LT1881 : 0.35 V/us "Positive" 
+
+Stage 1&2, caps 1 and 10 nF.
+
+Non GBW compensated:
+532  - 1k9
+178  - 5k7
+
+GBW compensated for AD549:
+455  - 1k78
+241  - 4k34
+
+GBW compensated for LT1881:
+517  - 1k89
+163  - 5k52
+With E96 values:
+511  - 1k91
+162  - 5k49
+
+
+GBW compensated for LT1637:
+449  - 1k75
+146  - 4k66
+
+GBW compensated for LT1012:
+472  - 1k79
+142  - 5k45
+
+GBW compensated for OP400:
+436 - 1k93
+134 - 5k25
+
