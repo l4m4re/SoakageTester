@@ -33,7 +33,7 @@
 #include"GPIO.h"
 #include"Sampler.h"
 
-#include"Biquad.h"
+#include"Butterworth.h"
 
 using namespace exploringBB;
 using namespace std;
@@ -44,7 +44,7 @@ using namespace std;
 //#define GPO_OUT P9_23 // pin for GPIO output
 #define GPIO_OUT 49 // GPIO output P9_23
 
-#define PWM_START_FREQ 2000
+#define PWM_START_FREQ 500
 #define PWM_STOP_FREQ  50000
 // P9_21 MUST be loaded as a slot before use
 static PWM           charge_pwm("pwm_test_P9_21.12"); 
@@ -132,7 +132,7 @@ void signalHandler( int signum ) {
     exit(signum);
 }
 
-#define NO_FILTER
+//#define NO_FILTER
 #ifdef NO_FILTER
 # define mGetVoltage(idx) sampler.getVoltage(idx)
 # define mGetCurrent(idx) sampler.getCurrent(idx)
@@ -162,6 +162,7 @@ void buf2file(const char* fname, double* voltage, double* current)
 
     fclose (pFile);
 }
+
 
 
 int main(int argc, char **argv)
@@ -304,23 +305,15 @@ int main(int argc, char **argv)
             current[idx] = sampler.getCurrent(idx);
         }
 
-        Biquad* volt_lpFilter = new Biquad();    // create a Biquad, lpFilter;
-        Biquad* curr_lpFilter = new Biquad();    // create a Biquad, lpFilter;
-
-#define Fc           30000.0
-
-        volt_lpFilter->setBiquad(bq_type_lowpass, Fc / SampleRate, 0.707, 0);
-        curr_lpFilter->setBiquad(bq_type_lowpass, Fc / SampleRate, 0.707, 0);
+        Butterworth volt_lpFilter;
+        Butterworth curr_lpFilter;
 
         // filter a buffer of input samples, in-place
         for (uint32 idx = 0; idx < nsamples; idx++) 
         {
-            voltage[idx] = volt_lpFilter->process(voltage[idx]);
-            current[idx] = curr_lpFilter->process(current[idx]);
+            voltage[idx] = volt_lpFilter.process(voltage[idx]);
+            current[idx] = curr_lpFilter.process(current[idx]);
         }
-
-        delete volt_lpFilter;
-        delete curr_lpFilter;
 #endif
 
 //define PRINT_OUTPUT

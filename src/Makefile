@@ -5,7 +5,7 @@ PRU_LD_FLAGS=-llibc.a
 HOST_C_FLAGS += -Wall -g -O2 -mtune=cortex-a8 -march=armv7-a -I/usr/local/include -I../include
 HOST_LD_FLAGS += -lprussdrv -lpthread
 
-SOURCE_FILES =  .obj/Sampler.o StdDeviation.cpp PWM.cpp GPIO.cpp Biquad.cpp util.cpp
+SOURCE_FILES =  .obj/Sampler.o StdDeviation.cpp PWM.cpp GPIO.cpp Butterworth.cpp util.cpp
 
 FIND_ADDRESS_COMMAND=`$(PRU_COMPILER_DIR)/bin/dispru .obj/pru.elf | grep _c_int00 | cut -f1 -d\  `
 
