@@ -12,197 +12,83 @@ Compile by:
 
 //#include "time.h"
 #include "Sampler.h"
-#include "pruio.h"
-#include "pruio_pins.h"
-#include "stdio.h"
-#include <string.h>
+#include "StdDeviation.h"
+
 #include <math.h>
 #include <unistd.h>   // for usleep
 #include <sys/time.h> // for timestamp
-//#include <iostream>
-//#include <string>
+#include <stdio.h>
+#include <pthread.h>
+#include <string.h>
+#include <stdlib.h>
+//#include <signal.h>
+#include <sys/time.h>
+//#include <fcntl.h>
+//#include <sys/mman.h>
+//#include <sndfile.h>
+
+#include <prussdrv.h>
+#include <pruss_intc_mapping.h>
+
+#define PRU_NUM 0
+
+#ifndef START_ADDR
+#error "START_ADDR must be defined"
+#endif
 
 using namespace std;
 
+/////////////////////////////////////////////////////////////////////
+// Globals
+//
 
-static uint32 io_head=0, io_tail=0;
+uint32* shared_ram = NULL;
+pthread_t thread   = 0;
 
-#include <iostream>
-#include <bitset>
-void printBinary( uint16 i )
-{
-    std::cout << std::bitset<16>(i);
-    std::cout << std::endl;
-}
-
-//#define HIGH_SPEED
+volatile uint32 Sampler::_nrSamples = 0;
+volatile uint16 Sampler::_volt[SamplerBufSize];
+volatile uint16 Sampler::_curr[SamplerBufSize];
+volatile bool   Sampler::_ok;
+volatile bool   Sampler::_active;
+volatile char   Sampler::_errMsg[256];
+         
 
 Sampler::Sampler() 
-    : io( pruio_new(PRUIO_ACT_ADC, 0, 0, 0) ) //! create new driver
-      // Only ADC active. For all subsystems use PRUIO_DEF_ACTIVE
-    , _nrSamples(0)
-    , _ok(false)
-#ifdef HIGH_SPEED
-//    , io_tmr(2500)     //!< The sampling rate in ns (2500 ns -> 400 kHz).
-//    , io_tmr(3333)     //!< The sampling rate in ns (3333 ns -> 300 kHz).
-//    , io_tmr(1000)     //!< The sampling rate in ns (2500 ns -> 400 kHz).
-//    , io_tmr(2222)     //!< The sampling rate in ns (2000 ns -> 500 kHz).
-    , io_tmr(5000)   //!< The sampling rate in ns (5000 ns -> 200 kHz).
-#else
-    , io_tmr(5000)   //!< The sampling rate in ns (5000 ns -> 200 kHz).
-                     // This is independent of the number of channels.
-#endif
-    , io_nrSteps(2)    //!< The number of active ADC steps 
-                       // (must match setStep calls and io_mask).
-    , io_mask(3 << 9)  //!< The active steps bitmaks (9 and 10).
-    , io_bufSize((io->ESize >> 1) / io_nrSteps) //!< Max number of samples,
-                                                     //   use all ERam
-    , maxInd(io_bufSize * io_nrSteps) //!< The maximum index in the ring buffer.
-//    , current_mean(2035.8f)
-    , current_mean(1.0f)
+    : current_mean(1.0f)
 {
-    if (io->Errr){
-        printf("constructor failed (%s)\n", io->Errr); return;}
-
-// pruio_adc_setStep documentation:
-//
-// http://users.freebasic-portal.de/tjf/Projekte/libpruio/doc/html/class_adc_udt.html#a243d91f0b7b7a29ada9bc14364c3284f
-//
-// This function is used to adapt a step configuration. In the constructor,
-// steps 1 to 8 get configured for AIN-0 to AIN-7 (other steps stay
-// un-configured). By this function you can customize the default settings and
-// / or configure further steps (input channel number, avaraging and delay
-// values).
-//
-// Parameters
-//     Stp  Step index (0 = step 0 => charge step, 1 = step 1 (=> AIN-0 by
-//          default), ..., 17 = idle step)-
-//     ChN  Channel number to scan (0 = AIN-0, 1 = AIN-1, ...)-
-//     Av   New value for avaraging (defaults to 4)-
-//     SaD  New value for sample delay (defaults to 0)-
-//     OpD  New value for open delay (defaults to 0x98)-
-
-//#define USE_AIN_0
-
-#ifdef HIGH_SPEED
-# define Av  0
-#else
-# define Av  3
-#endif
-#define SaD 0
-#define OpD 1
-
-#ifdef USE_AIN_0
-    printf("Sampler: Using AIN-0 for Voltage\n");
-    if (pruio_adc_setStep(io, 9, 0, Av, SaD, OpD)){
-        // step 9, AIN-0 -> voltage
-        printf("ADC step 1 init failed: (%s)\n", io->Errr); return;}
-#else
-    printf("Sampler: Using AIN-2 for Voltage\n");
-    if (pruio_adc_setStep(io, 9, 2, Av, SaD, OpD)){
-        // step 9, AIN-2 -> voltage
-        printf("ADC step 3 init failed: (%s)\n", io->Errr); return;}
-#endif
-
-    if (pruio_adc_setStep(io, 10, 1, Av, SaD, OpD)){
-        // step 10, AIN-1 -> current
-        printf("ADC step 2 init failed: (%s)\n", io->Errr); return;}
-
-#define mMDS 0 // Bit encoding == shift value
-    if (pruio_config(io, io_bufSize, io_mask, io_tmr, mMDS))
-    { //  configure driver
-        printf("config failed (%s)\n", io->Errr); return;
-    }
-#undef mMDS
-
-//    printf("Io_mask:\t"); printBinary( io_mask );
-
-    if (pruio_rb_start(io)){ //                           start ADC
-        printf("rb_start failed (%s)\n", io->Errr); return;}
-
-    strcpy( _errMsg, "");
-
-    io_head=0;
-    io_tail=0;
-
+    strcpy( const_cast<char*>(_errMsg), "");
     _ok = true;
+    _active = true;
+
+    // Load device tree overlay to enable PRU hardware.
+    load_device_tree_overlay();
+
+    // Load and run binary into pru0
+    init_pru_program();
+
+    _nrSamples = 0;
+
+    start_thread();
 }
 
 Sampler::~Sampler() 
 {
     cleanUp();
+    stop_thread();
+    prussdrv_exit();
 }
 
 
 void Sampler::cleanUp()
 {
-    if( io ) pruio_destroy(io);
-    io = 0;
+    prussdrv_pru_disable(PRU_NUM);
 }
-
-//#define __DEBUG__
-
-#ifdef __DEBUG__
-#define DEBUGBUFSIZE 10000
-    static uint32 _totNrSamp[DEBUGBUFSIZE];
-    static uint32 _nsamples[DEBUGBUFSIZE];
-    static uint32 _ioheads[DEBUGBUFSIZE];
-    static uint32 _iotails[DEBUGBUFSIZE];
-    static uint32 _iotails2[DEBUGBUFSIZE];
-    static uint32 _iotails3[DEBUGBUFSIZE];
-    static uint32 _sidx=0;
-
-void printDebugInfo()
-{
-    printf("---Sampler debug begin ----\n");
-    printf("TotNrSamp, nsamples, ioheads, iotails, iotails2, iotails3\n");
-    for( uint32 idx=0; idx<_sidx; idx++)
-        printf("%d, %d, %d, %d, %d, %d\n"
-            ,_totNrSamp[idx], _nsamples[idx], _ioheads[idx], _iotails[idx]
-            , _iotails2[idx], _iotails3[idx]);
-
-    printf("---Sampler debug end   ----\n");
-}    
-#endif  // __DEBUG__
-
 
 void Sampler::reset()
 {
     _nrSamples = 0;
-    io_tail=io_head;
-
-#ifdef __DEBUG__
-    _sidx=0;
-#endif
+    _active    = true;
 }
-
-/* Typical zero current calibration result:
-
-    Mean                            : 32529.3
-    Population Variance             :   941.1
-    Sample variance                 :   941.1
-    Population Standard Deviation   :    30.6
-    Sample Standard Deviation       :    30.6
-*/
-
-/* Typical 1.0A current calibration result:
-
-    Mean                            : 2641.0
-    Population Variance             :  7900.4
-    Sample variance                 :  7900.4
-    Population Standard Deviation   :    88.9
-    Sample Standard Deviation       :    88.9
-
-*/
-
-/* Typical 0.0A current after calibration:
- 
-    Mean                            :   -0.00088
-    Population Variance             :     0.0001
-    Sample variance                 :     0.0001
-    Population Standard Deviation   :     0.0119
-    Sample Standard Deviation       :     0.0119
-*/
 
 //#define current_mean     1997.7f    // When probe connected to AIN !!
 #define current_gain     1.0f/165.0625f
@@ -222,89 +108,78 @@ float Sampler::getVoltage( uint32 idx )
     return ret;
 }
 
-
-#define nrAdcSteps (io->Adc->ChAz)
-
-int Sampler::getSamples()
+#define channels 2
+void* Sampler::samplingThread(void* param)
 {
+    printf("Started Sampling thread\n");
 
-    uint32 lastsample = io->DRam[0];
-//    io_head = lastsample & 0xfffe; // only even indexes from AIN0 == voltage
+    uint32 nrsamp2get = 0;
+    uint32 buffer_position;
 
-    if(((lastsample >> 1) << 1) == lastsample)
-        //even
-        io_head = lastsample;
-    else
-        //odd
-        io_head = lastsample>=1 ? lastsample-1 : 0;
-
-
-//    uint32 nrSamples = ( io_head>io_tail ? (io_head-io_tail)/2
-//                                         : (maxInd-io_tail+io_head)/2 );
-
-    uint32 nrsamp2get = ( io_head>io_tail ? (io_head-io_tail)/2
-                                         : (maxInd-io_tail+io_head)/2 );
-
-#ifdef __DEBUG__
-    if( _sidx<DEBUGBUFSIZE)
+//    int count = 0;
+    while(1)
     {
-        _ioheads[_sidx] = io_head;
-        _iotails[_sidx] = io_tail;
-        _iotails2[_sidx] = 1234;
-        _iotails3[_sidx] = 5678;
-        _nsamples[_sidx]=nrsamp2get;
-        _totNrSamp[_sidx++]=_nrSamples;
-    }
-#endif
+        // Wait for interrupt from PRU
+        prussdrv_pru_wait_event(PRU_EVTOUT_0);
+        prussdrv_pru_clear_event(PRU_EVTOUT_0, PRU0_ARM_INTERRUPT);
 
-    if( _nrSamples + nrsamp2get > SamplerBufSize )
-    {
-        //strcpy( _errMsg, "Sampler buffer overflow.");
-        sprintf( _errMsg,
-                 "Buffer will overflow when adding %d samples. \n Buffer Size now: %d.",
-                 nrsamp2get,_nrSamples
-               );
+        if( _active )
+        {
+            // Read number of samples available
+            nrsamp2get = shared_ram[1];
 
-        _ok = false;
-        return 0;
-    }
+            // Read position in RAM
+            buffer_position = shared_ram[0];
+
 /*
-    if( io_head == lastsample ) // last sample misses current measurement
-    {
-       if( nrsamp2get <= 1
-           || io_head < nrAdcSteps // Don't bother handling overflow here. 
-         ) return 0;
-
-       //io_head -= nrAdcSteps; 
-       nrsamp2get--;
-    }
+            // Original: Use memcopy to copy samples to single buffer
+            //
+            memcpy(&(buffer[buffer_count]), &(shared_ram[buffer_position]),
+                                buffer_size*sizeof(uint32));
+            buffer_count += nrsamp2get;
 */
 
+            if( _nrSamples + nrsamp2get > SamplerBufSize )
+            {
+                //strcpy( _errMsg, "Sampler buffer overflow.");
+                sprintf( const_cast<char*>(_errMsg),
+                         "Buffer will overflow when adding %d samples. \n Buffer Size now: %d.",
+                         nrsamp2get,_nrSamples
+                       );
 
-// just leave out the last few samples. Will get those next time.
-    if (nrsamp2get <= 10) return 0;
-    nrsamp2get-=8;
+                _ok = false;
+                return NULL;
+            }
 
 
-#ifdef __DEBUG__
-    if( _sidx<DEBUGBUFSIZE) { _iotails2[_sidx-1] = io_tail; }
-#endif
-    for(uint32 cnt = 0; cnt < nrsamp2get; cnt++)
-    {
+            for(uint32 cnt = 0; cnt < nrsamp2get;)
+            { 
+                //  & 0xFFFF : mask out channel ID, etc.
+                _volt[_nrSamples] = shared_ram[buffer_position+cnt++]   & 0x0FFF;
+                _curr[_nrSamples] = shared_ram[buffer_position+cnt++] & 0x0FFF;
+                _nrSamples++;
+            }
+/*
+            if(count%10000 == 0){
+                // Print info
 
-        _volt[_nrSamples] = io->Adc->Value[io_tail];
-        _curr[_nrSamples] = io->Adc->Value[io_tail + 1];
+                uint32 val1 = shared_ram[buffer_position];
+                val1 &= 0xFFF;
+                uint32 val2 = shared_ram[buffer_position+1];
+                val2 &= 0xFFF;
 
-        io_tail += nrAdcSteps;
-        if (io_tail >= maxInd) { io_tail -= maxInd; }
-//        if (io_tail >= io_bufSize) { io_tail -= io_bufSize; }
+                printf("Values: %u %u\n", val1, val2);
+                printf("In my buf: %u %u\n", _volt[_nrSamples-1],_curr[_nrSamples-1]);
 
-        _nrSamples++;
+                printf("Buffer addr: %u \n", shared_ram[0]);
+                printf("buffer  cnt: %u \n", shared_ram[1]);
+            }
+            count++;
+*/
+        }
     }
-#ifdef __DEBUG__
-    if( _sidx<DEBUGBUFSIZE) { _iotails3[_sidx-1] = io_tail; }
-#endif
-    return nrsamp2get;
+
+    return NULL;
 }
 
 
@@ -314,129 +189,6 @@ unsigned long timeStamp()
     gettimeofday(&tv,NULL);
     return 1000000 * tv.tv_sec + tv.tv_usec;
 }
-
-
-/*  Arduino:
- 
-    Use of millis() and rollover
-
-    http://forum.arduino.cc/index.php?topic=122413
-
-    if all your time calculations are done as:
-    
-        if  ((later_time - earlier_time ) >=duration ) {action}
-
-    then the rollover does generally not come into play.
-
-    Q: Are there instances where the rollover does come into play?
-    A: When duration is >= the rollover period.  
-       (Or if you use signed comparison, >= 1/2 the rollover period).
-       
-       
-    https://www.baldengineer.com/arduino-how-do-you-reset-millis.html
-    
-    Avoiding rollover and checking how much time as passed is done in a single line:
-    
-      if ((unsigned long)(millis() - previousMillis) >= interval)
-
-    That single line of code is all that is really needed, to avoid rollover! 
-    
-*/
-
-
-
-void Sampler::sleepNSample(unsigned long usecs)
-{   
-    const __useconds_t period=100; // At 500 us, we will fetch about 20 samples 
-
-    unsigned long start_time = timeStamp();
-    unsigned long elapsed = 0;
-
-    getSamples();
-
-    elapsed = timeStamp() - start_time;
-    while( elapsed <= usecs )
-    {
-        usleep(period);
-        getSamples();
-        elapsed = timeStamp() - start_time;
-    }
-
-    getSamples();
-}
-
-
-class StdDeviation
-{
-// 
-// Adapted from: 
-//
-//    http://www.softwareandfinance.com/CPP/MeanVarianceStdDevi.html
-//
-// There is no explicit license information on the site, but it is intended
-// for educational purposes and contains many tutorials. It is therefore
-// assumed the original author has no objection against re-use and/or
-// re-licensing of this class.
-//
-private:
-
-    uint32   max;
-    double*  value;
-    double   mean;
-
-public:
-
-    StdDeviation(Sampler& sampler, uint32 startidx, uint32 stopidx)
-        : max( stopidx-startidx+1 )
-        , value( new double[max])
-    {
-        uint32 validx=0;
-        for( uint32 idx=startidx; idx<=stopidx; idx++)
-        {
-            value[validx++]= (double)sampler.curr(idx);
-        }
-    }
-
-    StdDeviation(double* values, uint32 nrvals)
-        : max( nrvals )
-        , value( new double[max])
-    {
-        for( uint32 idx=0; idx<nrvals; idx++)
-        {
-            value[idx]= values[idx];
-        }
-    }
-
-
-    ~StdDeviation() { delete value; }
- 
-
-    double CalculateMean()
-    {
-        double sum = 0;
-
-        for(uint32 i = 0; i < max; i++)
-        {
-            sum += value[i];
-        }
-
-        return (sum / max);
-    }
-
-    double CalculateVariane(double mean)
-    {
-        double temp = 0;
-
-        for(uint32 i = 0; i < max; i++) 
-            { temp += (value[i] - mean) * (value[i] - mean) ; }
-
-        return temp / max;
-    }
-
-    double GetStandardDeviation(double mean)
-        { return sqrt(CalculateVariane(mean)); }
-
-};
 
 #define maxMeans 256
 void Sampler::calibrateCurrent()
@@ -449,9 +201,8 @@ void Sampler::calibrateCurrent()
 //    long sample_time_usecs = 5000;  // 5 msec
     long sample_time_usecs = 10000;  // 10 msec
 
-    getSamples();
     uint32 startidx = lastIdx();
-    sleepNSample( sample_time_usecs );
+    usleep( sample_time_usecs );
     uint32 stopidx = lastIdx();
 
     StdDeviation sd(*this, startidx, stopidx);
@@ -470,3 +221,81 @@ void Sampler::calibrateCurrent()
         current_mean = sd2.CalculateMean();
     }
 }
+
+#define OVERLAY "PRUSSDRV"
+void Sampler::load_device_tree_overlay()
+{
+   // Check if device tree overlay is loaded, load if needed.
+   int device_tree_overlay_loaded = 0; 
+   FILE* f;
+   f = fopen("/sys/devices/bone_capemgr.9/slots","rt");
+   if(f==NULL){
+      printf("Initialisation failed (fopen rt)");
+      exit(1);
+   }
+   char line[256];
+   while(fgets(line, 256, f) != NULL){
+      if(strstr(line, OVERLAY ) != NULL){
+         device_tree_overlay_loaded = 1; 
+      }
+   }
+   fclose(f);
+
+   if(!device_tree_overlay_loaded){
+      f = fopen("/sys/devices/bone_capemgr.9/slots","w");
+      if(f==NULL){
+         printf("Initialisation failed (fopen)");
+         exit(1);
+      }
+      fprintf(f, OVERLAY );
+      fclose(f);
+      usleep(100000);
+   }
+}
+
+void Sampler::init_pru_program()
+{
+   tpruss_intc_initdata pruss_intc_initdata = PRUSS_INTC_INITDATA;
+   prussdrv_init();
+   prussdrv_open(PRU_EVTOUT_0);
+   prussdrv_pruintc_init(&pruss_intc_initdata);
+
+   // Get pointer to shared ram
+   void* p;
+   prussdrv_map_prumem(PRUSS0_SHARED_DATARAM, &p);
+   shared_ram = (uint32*)p;
+
+   prussdrv_load_datafile(PRU_NUM, "../src/data.bin");
+   prussdrv_exec_program_at(PRU_NUM, "../src/text.bin", START_ADDR);
+}
+
+
+
+void Sampler::start_thread()
+{
+    pthread_attr_t attr;
+    if(pthread_attr_init(&attr)){
+        printf("Cannot start a new thread.\n");
+        exit(1);
+    }
+    if(pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED)){
+        printf("Cannot start a new thread.");
+        exit(1);
+    }
+    if(pthread_create(&thread, &attr, &Sampler::samplingThread, NULL)){
+        printf("Cannot start a new thread.");
+        exit(1);
+    }
+}
+
+void Sampler::stop_thread()
+{   int print = 10;
+    if( !thread) return;
+    while(pthread_cancel(thread) && print--)
+    {
+        printf("Stopping thread\n");
+    }
+    thread = 0;
+    printf("Stopped thread\n");
+}
+

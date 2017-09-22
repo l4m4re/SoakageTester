@@ -22,6 +22,7 @@ Compile by:
 //#include <sys/time.h> // for timestamp
 
 #include"Sampler.h"
+#include"StdDeviation.h"
 
 using namespace std;
 
@@ -41,97 +42,10 @@ void signalHandler( int signum ) {
     exit(signum);
 }
 
-#include <iostream>
-#include <string>
-#include <math.h>
-
-class StdDeviation
-{
-// 
-// Adapted from: 
-//
-//    http://www.softwareandfinance.com/CPP/MeanVarianceStdDevi.html
-//
-// There is no explicit license information on the site, but it is intended
-// for educational purposes and contains many tutorials. It is therefore
-// assumed the original author has no objection against re-use and/or
-// re-licensing of this class.
-//
-private:
-
-    uint32   max;
-    double*  value;
-    double   mean;
-
-public:
-
-    StdDeviation( bool current=true)
-        : max( sampler.nrSamples() )
-        , value( new double[max])
-    {
-        for( uint32 idx=0; idx<max; idx++)
-        {
-            if( current) 
-                value[idx]= (double)sampler.curr(idx);
-                //value[idx]= (double)sampler.getCurrent(idx);
-            else
-                //value[idx]= (double)sampler.volt(idx);
-                value[idx]= (double)sampler.getVoltage(idx);
-        }
-    }
-
-    ~StdDeviation() { delete value; }
- 
-
-    double CalculateMean()
-    {
-        double sum = 0;
-
-        for(uint32 i = 0; i < max; i++)
-        {
-            sum += value[i];
-//            printf("%10.5lf\n", value[i]);
-        }
-
-        return (sum / max);
-    }
- 
-
-    double CalculateVariane()
-    {
-        mean = CalculateMean();
-
-        double temp = 0;
-
-        for(uint32 i = 0; i < max; i++)
-            { temp += (value[i] - mean) * (value[i] - mean) ; }
-
-        return temp / max;
-    }
-
-
-    double CalculateSampleVariane()
-    {
-        mean = CalculateMean();
-
-        double temp = 0;
-
-        for(uint32 i = 0; i < max; i++)
-            { temp += (value[i] - mean) * (value[i] - mean) ; }
-
-        return temp / (max - 1);
-    }
-
-    double GetStandardDeviation()
-        { return sqrt(CalculateVariane()); }
-
-    double GetSampleStandardDeviation()
-        { return sqrt(CalculateSampleVariane()); }
-};
 
 void computeStatistics( bool current = true)
 {
-    StdDeviation sd( current );
+    StdDeviation sd( sampler, 0, sampler.lastIdx(), current );
  
     double mean = sd.CalculateMean();
 
@@ -175,17 +89,17 @@ int main(int argc, char **argv)
     if( !sampler.ok() ) { cleanUp(); return 1; }
     sampler.reset();
 
-    //long sample_time_usecs = 10000000;  // 10 sec
+    long sample_time_usecs = 10000000;  // 10 sec
     //long sample_time_usecs = 1000000;  // 1 sec
-    long sample_time_usecs = 500000;  // 0.5 sec
-    sampler.sleepNSample( sample_time_usecs );
+    //long sample_time_usecs = 500000;  // 0.5 sec
+    usleep( sample_time_usecs );
 
     if( ! sampler.ok() )
         printf("Sampler error (%s)\n", sampler.errMsg()); 
 
     unsigned long stopTime=timeStamp();
 
-    uint32 nsamples = 2 * sampler.nrSamples(); // 2 channels
+    uint32 nsamples = 2*sampler.nrSamples(); // 2 channels
 
     double elapsed = (stopTime-startTime)/1e6;
     printf("Sampling took %f sec.\n", elapsed);
