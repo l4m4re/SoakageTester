@@ -34,7 +34,7 @@ StdDeviation::StdDeviation(double* values, uint32 nrvals)
 }
 
 
-StdDeviation::~StdDeviation() { delete value; }
+StdDeviation::~StdDeviation() { delete[] value; }
  
 
 double StdDeviation::CalculateMean()

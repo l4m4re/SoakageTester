@@ -29,6 +29,9 @@ You specified the following parameters:
 
 */
 /*
+ 
+#define GAIN   1.125873410e+06
+
 double Butterworth::process( double in)
 { 
     xv[0] = xv[1]; xv[1] = xv[2]; xv[2] = xv[3];
@@ -64,6 +67,8 @@ You specified the following parameters:
     corner2     =   
     adzero  =   
 */
+
+#define GAIN   1.079064620e+02
 double Butterworth::process( double in)
 { 
     xv[0] = xv[1]; xv[1] = xv[2]; xv[2] = xv[3];

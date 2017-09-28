@@ -30,19 +30,23 @@ class Sampler {
 
     inline uint16   volt( uint32 idx )
                     { 
-                        if( idx < _nrSamples ) return _volt[idx];
+                        if( idx < _nrSamples )    return _volt[idx];
+                        if( !idx && !_nrSamples ) return 0;
 
                         sprintf( const_cast<char*>(_errMsg),
-                                        "Out of range error.\n");
+                                        "Voltage out of range error. idx: %d, nrSamples: %d.\n",
+                                        idx, _nrSamples);
                         _ok = false;
                         return 0;
                     }
     inline uint16   curr( uint32 idx )
                     { 
-                        if( idx < _nrSamples ) return _curr[idx];
+                        if( idx < _nrSamples )    return _curr[idx];
+                        if( !idx && !_nrSamples ) return 0;
 
                         sprintf( const_cast<char*>(_errMsg),
-                                        "Out of range error.\n");
+                                        "Current out of range error. idx: %d, nrSamples: %d.\n",
+                                        idx, _nrSamples);
                         _ok = false;
                         return 0;
                     }

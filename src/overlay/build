@@ -1,5 +1,7 @@
 #!/bin/bash
 
-echo "Compiling the overlay from .dts to .dtbo"
+echo "Compiling P9_23 and P9_14 overlays from .dts to .dtbo"
 
-dtc -O dtb -o SoakTst-P9_23-00A0.dtbo -b 0 -@ SoakTst-P9_23.dts
+#dtc -O dtb -o SoakTst-P9_23-00A0.dtbo -b 0 -@ SoakTst-P9_23.dts
+dtc -O dtb -o bspm_P9_23_f-00A0.dtbo -b 0 -@ bspm_P9_23_f.dts
+dtc -O dtb -o bspm_P9_14_f-00A0.dtbo -b 0 -@ bspm_P9_14_f.dts

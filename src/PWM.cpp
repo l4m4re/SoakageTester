@@ -125,7 +125,8 @@ int PWM::stop(){
 }
 
 PWM::~PWM(){
-	write(this->path, PWM_RUN, 0);
+//	write(this->path, PWM_RUN, 0);
+	write(this->path, PWM_DUTY, 0);
 }
 
 

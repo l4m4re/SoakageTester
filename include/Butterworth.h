@@ -5,7 +5,6 @@
 
 #define NZEROS 8
 #define NPOLES 8
-#define GAIN   1.125873410e+06
 
 
 class Butterworth
