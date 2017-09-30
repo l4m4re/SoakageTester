@@ -86,7 +86,9 @@ void Sampler::cleanUp()
 
 void Sampler::reset()
 {
+    strcpy( const_cast<char*>(_errMsg), "");
     _nrSamples = 0;
+    _ok        = true;
     _active    = true;
 }
 
@@ -123,7 +125,7 @@ void* Sampler::samplingThread(void* param)
         prussdrv_pru_wait_event(PRU_EVTOUT_0);
         prussdrv_pru_clear_event(PRU_EVTOUT_0, PRU0_ARM_INTERRUPT);
 
-        if( _active )
+        if( _active && _ok )
         {
             // Read number of samples available
             nrsamp2get = shared_ram[1];
@@ -148,7 +150,7 @@ void* Sampler::samplingThread(void* param)
                        );
 
                 _ok = false;
-                return NULL;
+//                return NULL;  // Don't return, wait until we're reset.
             }
 
 

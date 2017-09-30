@@ -47,13 +47,13 @@ using namespace std;
 
 #define BEDINI
 #ifdef BEDINI
-#define PWM_START_FREQ 5000
-#define PWM_STOP_FREQ  30000
+#define PWM_START_FREQ 300
+#define PWM_STOP_FREQ  11000
 // P9_14 MUST be loaded as a slot before use
 static PWM           charge_pwm("pwm_test_P9_14.13"); 
 #else
 #define PWM_START_FREQ 5000
-#define PWM_STOP_FREQ  15000
+#define PWM_STOP_FREQ  11000
 // P9_21 MUST be loaded as a slot before use
 static PWM           charge_pwm("pwm_test_P9_21.12"); 
 #endif
@@ -65,7 +65,7 @@ static float         charge_pwm_freq     = PWM_START_FREQ;
 //static unsigned int  charge_pwm_duration = 1750;  // in ns. 
 #ifdef BEDINI
 //static unsigned int  charge_pwm_duration = 0.1 * 1e9/PWM_START_FREQ;
-static unsigned int  charge_pwm_duration = 30000;
+static float         charge_pwm_duty_perc = 25.0;
 #else
 static unsigned int  charge_pwm_duration = 30000;  // in ns. 40 us
 #endif
@@ -91,8 +91,15 @@ void startCharge()
     if(charge_pwm.isRunning())
         charge_pwm.stop();
 
-    charge_pwm.setFrequency(charge_pwm_freq);      // Set the period as a frequency
-    charge_pwm.setDutyCycle(charge_pwm_duration);
+    for( int idx=0; idx<2; idx++) 
+    {
+        charge_pwm.setFrequency(charge_pwm_freq);      // Set the period as a frequency
+#ifdef BEDINI
+        charge_pwm.setDutyPerc(charge_pwm_duty_perc);
+#else
+        charge_pwm.setDutyCycle(charge_pwm_duration);
+#endif
+    }
 
     startChrgIdx = sampler.lastIdx();
     charge_pwm.run();
@@ -148,7 +155,7 @@ void signalHandler( int signum ) {
     exit(signum);
 }
 
-#define NO_FILTER
+//#define NO_FILTER
 #ifdef NO_FILTER
 # define mGetVoltage(idx) sampler.getVoltage(idx)
 # define mGetCurrent(idx) sampler.getCurrent(idx)
@@ -202,7 +209,7 @@ int main(int argc, char **argv)
     _outGPIO.setDirection(OUTPUT);
 
 
-    float fully_charged_voltage = 27.0f;   //!< stop charging 
+    float fully_charged_voltage = 22.0f;   //!< stop charging 
     //float fully_charged_voltage = 7.5f;   //!< stop charging 
     float fully_discharged_voltage = 0.2f; //!< stop discharging
 
@@ -223,6 +230,7 @@ int main(int argc, char **argv)
 
     printf("run, freq, injoules, outjoules, perc, sampler_current_mean\n");
 
+    bool error = false;
     uint32 n=1;
     for(;;)
     {
@@ -256,8 +264,14 @@ int main(int argc, char **argv)
                 if (v_val <= fully_charged_voltage) { done=false; break;}
             }
 
-            if( !sampler.ok() )
-                { printf("Sampler error (%s)\n", sampler.errMsg()); cleanUp(); return 1; }
+            if( !sampler.ok() || !sampler.nrSamples() )
+            {
+                printf("Sampler error while charging (%s)\n", sampler.errMsg());
+                done = true;
+
+                sampler.reset();
+                error = true;
+            }
 
             usleep(500); // At 500 us, we will fetch about 100 samples 
 
@@ -294,7 +308,13 @@ int main(int argc, char **argv)
             }
 
             if( !sampler.ok() )
-                { printf("Sampler error (%s)\n", sampler.errMsg()); cleanUp(); return 1; }
+            {
+                printf("Sampler error while discharging (%s)\n", sampler.errMsg());
+                sampler.reset();
+                error = true;
+                done = true;
+                usleep( 500000 );// make sure we've discharged
+            }
 
             usleep(500); // At 500 us, we will fetch about 100 samples 
         } while( !done );
@@ -310,159 +330,188 @@ int main(int argc, char **argv)
         sampler.calibrateCurrent();
         sampler.stop();
 
+        if( !error && sampler.ok() ) 
+        {
         // Compute in/out Joules from buffer
-        
-        double inJoules = 0, outJoules = 0;
-//        int stage=0;
+            double inJoules = 0, outJoules = 0;
+    //        int stage=0;
 
 
 #ifndef NO_FILTER
-        uint32 nsamples = sampler.nrSamples();
-        double* voltage = new double[nsamples];
-        double* current = new double[nsamples];
+            uint32 nsamples = sampler.nrSamples();
+            double* voltage = new double[nsamples];
+            double* current = new double[nsamples];
 
-        for( uint32 idx=0; idx<nsamples; idx++)
-        {
-            voltage[idx] = sampler.getVoltage(idx);
-            current[idx] = sampler.getCurrent(idx);
-        }
+            for( uint32 idx=0; idx<nsamples; idx++)
+            {
+                voltage[idx] = sampler.getVoltage(idx);
+                current[idx] = sampler.getCurrent(idx);
+            }
 
-        Butterworth volt_lpFilter;
-        Butterworth curr_lpFilter;
+            Butterworth volt_lpFilter;
+            Butterworth curr_lpFilter;
 
-        // filter a buffer of input samples, in-place
-        for (uint32 idx = 0; idx < nsamples; idx++) 
-        {
-            voltage[idx] = volt_lpFilter.process(voltage[idx]);
-            current[idx] = curr_lpFilter.process(current[idx]);
-        }
+            // filter a buffer of input samples, in-place
+            for (uint32 idx = 0; idx < nsamples; idx++) 
+            {
+                voltage[idx] = volt_lpFilter.process(voltage[idx]);
+                current[idx] = curr_lpFilter.process(current[idx]);
+            }
 #endif
 
-//define PRINT_OUTPUT
+    //define PRINT_OUTPUT
 
 #ifdef PRINT_OUTPUT        
-        printf("-- start  --\n");
-        for( uint32 idx=0; idx<startChrgIdx; idx++)
-        {
-            double volt = mGetVoltage(idx);
-            double curr = mGetCurrent(idx);
-            printf("%f, %f, %d\n",volt,curr,stage);
-        }
+            printf("-- start  --\n");
+            for( uint32 idx=0; idx<startChrgIdx; idx++)
+            {
+                double volt = mGetVoltage(idx);
+                double curr = mGetCurrent(idx);
+                printf("%f, %f, %d\n",volt,curr,stage);
+            }
 
-        stage++;
-        printf("-- charge --\n");
+            stage++;
+            printf("-- charge --\n");
 #endif
-        for( uint32 idx=startChrgIdx; idx<stopChrgIdx; idx++)
-        {
-            double volt = mGetVoltage(idx);
-            double curr = mGetCurrent(idx);
+            for( uint32 idx=startChrgIdx; idx<stopChrgIdx; idx++)
+            {
+                double volt = mGetVoltage(idx);
+                double curr = mGetCurrent(idx);
 #ifdef PRINT_OUTPUT        
-            printf("%f, %f, %d\n",volt,curr,stage);
+                printf("%f, %f, %d\n",volt,curr,stage);
 #endif
 
-//            double dPow = curr * volt * sampler.period();
-            double dPow = curr * volt / SampleRate;
-            inJoules += dPow;
-        }
-
-#ifdef PRINT_OUTPUT        
-        stage++;
-        printf("-- pause --\n");
-        for( uint32 idx=stopChrgIdx; idx<startDischrgIdx; idx++)
-        {
-            double volt = mGetVoltage(idx);
-            double curr = mGetCurrent(idx);
-            printf("%f, %f, %d\n",volt,curr,stage);
-        }
-
-        stage++;
-        printf("-- discharge --\n");
-#endif
-        for( uint32 idx=startDischrgIdx; idx<stopDischrgIdx; idx++)
-        {
-            double volt = mGetVoltage(idx);
-            double curr = mGetCurrent(idx);
-#ifdef PRINT_OUTPUT        
-            printf("%f, %f, %d\n",volt,curr,stage);
-#endif
-
-//            double dPow = curr * volt * sampler.period();
-            double dPow = curr * volt / SampleRate;
-            outJoules += dPow;
-        }
-        outJoules *= -1.0f;
+    //            double dPow = curr * volt * sampler.period();
+                double dPow = curr * volt / SampleRate;
+                inJoules += dPow;
+            }
 
 #ifdef PRINT_OUTPUT        
-        stage++;
-        printf("-- lead out --\n");
-        for( uint32 idx=stopDischrgIdx; idx<sampler.nrSamples(); idx++)
-        {
-            double volt = mGetVoltage(idx);
-            double curr = mGetCurrent(idx);
-            printf("%f, %f, %d\n",volt,curr,stage);
-        }
+            stage++;
+            printf("-- pause --\n");
+            for( uint32 idx=stopChrgIdx; idx<startDischrgIdx; idx++)
+            {
+                double volt = mGetVoltage(idx);
+                double curr = mGetCurrent(idx);
+                printf("%f, %f, %d\n",volt,curr,stage);
+            }
+
+            stage++;
+            printf("-- discharge --\n");
+#endif
+            for( uint32 idx=startDischrgIdx; idx<stopDischrgIdx; idx++)
+            {
+                double volt = mGetVoltage(idx);
+                double curr = mGetCurrent(idx);
+#ifdef PRINT_OUTPUT        
+                printf("%f, %f, %d\n",volt,curr,stage);
 #endif
 
-/*
-        usleep( 10000 );
+    //            double dPow = curr * volt * sampler.period();
+                double dPow = curr * volt / SampleRate;
+                outJoules += dPow;
+            }
+            outJoules *= -1.0f;
 
-        printf("-- done --\n");
+#ifdef PRINT_OUTPUT        
+            stage++;
+            printf("-- lead out --\n");
+            for( uint32 idx=stopDischrgIdx; idx<sampler.nrSamples(); idx++)
+            {
+                double volt = mGetVoltage(idx);
+                double curr = mGetCurrent(idx);
+                printf("%f, %f, %d\n",volt,curr,stage);
+            }
+#endif
 
-        printf("Indexes: %d, %d, %d, %d, %d \n", startChrgIdx, stopChrgIdx, startDischrgIdx, stopDischrgIdx, sampler.nrSamples());
-        printf("Joules in  : %f\n",inJoules);
-        printf("Joules out : %f\n",outJoules);
-        printf("Perc out/in: %f\n",100.0f*outJoules/inJoules);
-*/
+    /*
+            usleep( 10000 );
+
+            printf("-- done --\n");
+
+            printf("Indexes: %d, %d, %d, %d, %d \n", startChrgIdx, stopChrgIdx, startDischrgIdx, stopDischrgIdx, sampler.nrSamples());
+            printf("Joules in  : %f\n",inJoules);
+            printf("Joules out : %f\n",outJoules);
+            printf("Perc out/in: %f\n",100.0f*outJoules/inJoules);
+    */
 
 
-        float perc = 100.0f*outJoules/inJoules;
+            float perc = 100.0f*outJoules/inJoules;
 
-
-        printf("%d, %5.2f, %d, %5.4f, %5.4f, %3.4f, %5.4f\n",
-                n, charge_pwm_freq, charge_pwm_duration,
-                inJoules, outJoules, perc,
-                sampler.currentMean());
 #ifdef BEDINI
-        if( perc > max_perc && n>10 && perc > 50.0 )
+            printf("%d, %5.2f, %3.2f, %5.4f, %5.4f, %3.4f, %5.4f\n",
+                    n, charge_pwm_freq, charge_pwm_duty_perc,
 #else
-        if( perc > max_perc && n>10 && charge_pwm_freq > 5000 )
+            printf("%d, %5.2f, %d, %5.4f, %5.4f, %3.4f, %5.4f\n",
+                    n, charge_pwm_freq, charge_pwm_duration,
 #endif
-        {
-            max_perc = perc;
-            printf("Saving best result\n");
+                    inJoules, outJoules, perc,
+                    sampler.currentMean());
+#ifdef BEDINI
+            if( perc > max_perc && n>10 && perc > 50.0 )
+#else
+            if( perc > max_perc && n>10 && charge_pwm_freq > 5000 )
+#endif
+            {
+                max_perc = perc;
+                printf("Saving best result\n");
 #ifdef NO_FILTER
-            buf2file( "/data/arend/work/SoakageTester/bin/buf.log");
+                buf2file( "/data/arend/work/SoakageTester/bin/buf.log");
 #else
-            buf2file( "/data/arend/work/SoakageTester/bin/buf.log",
-                      voltage, current, nsamples);
+                buf2file( "/data/arend/work/SoakageTester/bin/buf.log",
+                          voltage, current, nsamples);
 #endif
+            }
+
+            charge_pwm_freq *= 1.001; 
+            //charge_pwm_freq += 11;
+            //
+#ifndef NO_FILTER
+        delete[] voltage;
+        delete[] current;
+#endif
+
+            
         }
+        
 
-        charge_pwm_freq *= 1.1; 
-        //charge_pwm_freq += 10;
-
+#ifdef BEDINI
+        if( charge_pwm_freq  > PWM_STOP_FREQ || error  )
+        { 
+            error = false;
+            charge_pwm_freq = PWM_START_FREQ;
+            charge_pwm_duty_perc += 0.1;
+        }
+#else
         float duty = charge_pwm_duration/(1e9/charge_pwm_freq);
-
         if( charge_pwm_freq  > PWM_STOP_FREQ || duty > 0.9 )
         { 
             charge_pwm_freq = PWM_START_FREQ;
             charge_pwm_duration += 1000;
         }
-
+#endif
 
         if( ! sampler.ok() )
         { 
-            printf("Sampler error (%s)\n", sampler.errMsg());
+            printf("Sampler error after computation (%s)\n", sampler.errMsg());
+            sampler.reset();
+        }
+
+        if( !sampler.ok() )
+        { 
+            printf("Still Sampler error after reset. (%s)\n", sampler.errMsg());
             cleanUp(); 
             return 1;
         }
 
-//        sampler.calibrateCurrent();
+        if( charge_pwm_duty_perc > 95.0 )
+        { 
+            printf("Finished run.");
+            cleanUp(); 
+            return 0;
+        }
 
-#ifndef NO_FILTER
-        delete[] voltage;
-        delete[] current;
-#endif
+//        sampler.calibrateCurrent();
 
         n++;
     }
