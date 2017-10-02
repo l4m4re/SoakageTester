@@ -15,26 +15,34 @@ void init_adc();
 
 volatile register unsigned int __R31;
 volatile unsigned int* shared_ram;
+volatile unsigned int* shared_vars;
+//volatile unsigned int* shared_ram_end;
 volatile unsigned int* buffer;
 
-#define block_size 128
-#define channels 2
+
+/* Shared RAM size is 12 kB. Since the actual data is 16 bits and a 32 bits
+ * buffer was used, this is a waste of memory space. Further, quite some
+ * blocks were missed every now and then, so we opt for a ring buffer as big
+ * as possible and generate interrupts every x amount of samples.
+ */
+
+
+
+#define INTERRUPT_FREQ  128
+#define VARS_OFFSET      0x2F00
+#define MAX_BUF_IDX     (0x2E00/4)
 
 int main(int argc, const char *argv[])
 {
     // Init globals
-    shared_ram = (volatile unsigned int *)0x10000;
-    buffer = &(shared_ram[100]); // We'll start putting samples in shared ram 
-                                // address 100 and use up to 6KB = 4 bytes 
-                                // (size of unsigned int) * block_size * 
-                                // num_channels * 2 buffers; 
+    shared_ram     = (volatile unsigned int *)0x10000;
+//    shared_ram_end = (volatile unsigned int *)0x12EFF;
+    shared_vars    = (volatile unsigned int *)0x12F00;
+    buffer = &(shared_ram[0]); 
+    
     // Locals:
-    unsigned int buffer_count = 0;
-    unsigned int which_buffer = 0; // We'll alternate the memory positions 
-                                   // where we put samples in so that the 
-                                   // arm cpu can read one of them while we 
-                                   // fill the other one.
-    unsigned int buffer_start = which_buffer*(block_size+1)*channels;
+    unsigned int buf_idx     = 0;
+    unsigned int interrupt_count  = 0; // Enables host to check for missed interrupts.
 
     init_adc();
 
@@ -57,19 +65,23 @@ int main(int argc, const char *argv[])
         if( HWREG(0x44e0d0e4) && HWREG(0x44e0d0f0) )
         {
             // FIFO 0
-            buffer[buffer_start + buffer_count] = HWREG(0x44e0d100);
-            buffer_count ++;
-            // FIFO 1
-            buffer[buffer_start + buffer_count] = HWREG(0x44e0d200);
-            buffer_count ++;
+            buffer[buf_idx++] = ( HWREG(0x44e0d100) & 0x0FFF ) << 16 | 
+                                  HWREG(0x44e0d200) & 0x0FFF;
+
+            if( buf_idx >= MAX_BUF_IDX )
+            {
+                buf_idx = 0;
+            }
         }
 
-        if(buffer_count >= block_size*channels)
+        if(buf_idx % INTERRUPT_FREQ == 0)
         {
             // put number of available samples (block size) in position 0,
             // address of buffer in position 1 and IRQ
-            shared_ram[0] = 100 + buffer_start;
-            shared_ram[1] = buffer_count;
+            shared_vars[0] = VARS_OFFSET;
+            shared_vars[1] = buf_idx;
+            shared_vars[2] = interrupt_count++;
+            shared_vars[3] = MAX_BUF_IDX;
 /*
             fifo0_count = HWREG(0x44e0d0e4); 
             fifo1_count = HWREG(0x44e0d0f0);
@@ -78,9 +90,6 @@ int main(int argc, const char *argv[])
             shared_ram[5] = which_buffer;
 */
             __R31 = 35;
-            buffer_count = 0;
-            which_buffer = !which_buffer;
-            buffer_start = which_buffer*(block_size+1)*channels;
         }
     }
 }

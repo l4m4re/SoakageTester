@@ -26,7 +26,6 @@ all:
 	g++ $(HOST_C_FLAGS) -o ../bin/SoakTest SoakTest.cpp $(SOURCE_FILES) $(HOST_LD_FLAGS) && \
 	g++ $(HOST_C_FLAGS) -o ../bin/Calibrate Calibrate.cpp $(SOURCE_FILES) $(HOST_LD_FLAGS)
 
-
 .PHONY: clean
 clean:
 	-rm -f *.obj

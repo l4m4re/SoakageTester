@@ -42,8 +42,9 @@ using namespace std;
 // Globals
 //
 
-uint32* shared_ram = NULL;
-pthread_t thread   = 0;
+uint32* shared_ram  = NULL;
+uint32* shared_vars = NULL;
+pthread_t thread    = 0;
 
 volatile uint32 Sampler::_nrSamples = 0;
 volatile uint16 Sampler::_volt[SamplerBufSize];
@@ -51,7 +52,12 @@ volatile uint16 Sampler::_curr[SamplerBufSize];
 volatile bool   Sampler::_ok;
 volatile bool   Sampler::_active;
 volatile char   Sampler::_errMsg[256];
-         
+     
+volatile uint32 Sampler::buf_head;      
+volatile uint32 Sampler::buf_tail;      
+volatile uint32 Sampler::interrupt_count;
+volatile uint32 Sampler::last_interrupt_count;
+
 
 Sampler::Sampler() 
     : current_mean(1.0f)
@@ -72,7 +78,8 @@ Sampler::Sampler()
 }
 
 Sampler::~Sampler() 
-{
+{ 
+    _active = false;
     cleanUp();
     stop_thread();
     prussdrv_exit();
@@ -81,14 +88,28 @@ Sampler::~Sampler()
 
 void Sampler::cleanUp()
 {
+    _active = false;
     prussdrv_pru_disable(PRU_NUM);
 }
 
+void Sampler::stop()
+{
+    _active    = false;
+
+}
+
+
 void Sampler::reset()
 {
-    strcpy( const_cast<char*>(_errMsg), "");
+//    strcpy( const_cast<char*>(_errMsg), "");
     _nrSamples = 0;
     _ok        = true;
+
+    buf_head = 0;
+    buf_tail = 0xdeadbeef;
+    interrupt_count = 0;
+    last_interrupt_count = 0;
+
     _active    = true;
 }
 
@@ -110,75 +131,175 @@ float Sampler::getVoltage( uint32 idx )
     return ret;
 }
 
-#define channels 2
+//#define channels 2
+
+// from pru.c. Should go to a header file....
+#define INTERRUPT_FREQ  128
+#define VARS_OFFSET      0x2F00
+#define MAX_BUF_IDX     (0x2E00/4)
+
 void* Sampler::samplingThread(void* param)
 {
+/*
+    int policy;
+    struct sched_param sch_p;
+
+    pthread_getschedparam(pthread_self(), &policy, &sch_p);
+    sch_p.sched_priority = sched_get_priority_max(policy);
+
+    if( pthread_setschedparam(pthread_self(), policy, &sch_p) )     
+    {
+        printf("Cannot set thread scheduling priority.\n");
+        return NULL;
+    }
+*/
+
     printf("Started Sampling thread\n");
 
     uint32 nrsamp2get = 0;
-    uint32 buffer_position;
+
 
 //    int count = 0;
     while(1)
     {
         // Wait for interrupt from PRU
         prussdrv_pru_wait_event(PRU_EVTOUT_0);
-        prussdrv_pru_clear_event(PRU_EVTOUT_0, PRU0_ARM_INTERRUPT);
 
-        if( _active && _ok )
+        if( ! _active )
         {
-            // Read number of samples available
-            nrsamp2get = shared_ram[1];
-
-            // Read position in RAM
-            buffer_position = shared_ram[0];
-
-/*
-            // Original: Use memcopy to copy samples to single buffer
-            //
-            memcpy(&(buffer[buffer_count]), &(shared_ram[buffer_position]),
-                                buffer_size*sizeof(uint32));
-            buffer_count += nrsamp2get;
-*/
-
-            if( _nrSamples + nrsamp2get > SamplerBufSize )
-            {
-                //strcpy( _errMsg, "Sampler buffer overflow.");
-                sprintf( const_cast<char*>(_errMsg),
-                         "Buffer will overflow when adding %d samples. \n Buffer Size now: %d.",
-                         nrsamp2get,_nrSamples
-                       );
-
-                _ok = false;
-//                return NULL;  // Don't return, wait until we're reset.
-            }
-
-
-            for(uint32 cnt = 0; cnt < nrsamp2get;)
-            { 
-                //  & 0xFFFF : mask out channel ID, etc.
-                _volt[_nrSamples] = shared_ram[buffer_position+cnt++]   & 0x0FFF;
-                _curr[_nrSamples] = shared_ram[buffer_position+cnt++] & 0x0FFF;
-                _nrSamples++;
-            }
-/*
-            if(count%10000 == 0){
-                // Print info
-
-                uint32 val1 = shared_ram[buffer_position];
-                val1 &= 0xFFF;
-                uint32 val2 = shared_ram[buffer_position+1];
-                val2 &= 0xFFF;
-
-                printf("Values: %u %u\n", val1, val2);
-                printf("In my buf: %u %u\n", _volt[_nrSamples-1],_curr[_nrSamples-1]);
-
-                printf("Buffer addr: %u \n", shared_ram[0]);
-                printf("buffer  cnt: %u \n", shared_ram[1]);
-            }
-            count++;
-*/
+            interrupt_count = 0;
+            last_interrupt_count = 0;
+            buf_head = 0;
+            buf_tail = 0xdeadbeef;
         }
+        else if( _ok )
+        {
+            buf_head = shared_vars[1];
+            if( buf_tail == 0xdeadbeef ) buf_tail = buf_head;
+
+            interrupt_count = shared_vars[2];
+            nrsamp2get = ( buf_head >= buf_tail ? (buf_head-buf_tail)
+                                                : (MAX_BUF_IDX-buf_tail+buf_head) );
+
+            while( nrsamp2get >= INTERRUPT_FREQ )
+            // Continue fetching if we missed an interrupt 
+            {
+
+                if( _nrSamples && last_interrupt_count && interrupt_count > last_interrupt_count + 1)
+                {
+
+                    uint32 ints_missed = interrupt_count - (last_interrupt_count+1);
+                    uint32 samples_missed = INTERRUPT_FREQ * ints_missed;
+                    
+                    if( samples_missed > 0 && nrsamp2get < samples_missed )
+                    {
+#if 0                
+                    sprintf( const_cast<char*>(_errMsg),
+#else
+                    printf(
+#endif
+                         "Info: Missing %u samples. Getting %u samples. Should be %u. Missed %u interrupts.\n",
+                         samples_missed-nrsamp2get, nrsamp2get, samples_missed, ints_missed
+                       );
+    //                _ok = false;
+                    }
+                }
+
+                last_interrupt_count = interrupt_count;
+
+    /*
+                // Original: Use memcopy to copy samples to single buffer
+                //
+                memcpy(&(buffer[buffer_count]), &(shared_ram[buffer_position]),
+                                    buffer_size*sizeof(uint32));
+                buffer_count += nrsamp2get;
+    */
+
+                if( _nrSamples + nrsamp2get > SamplerBufSize )
+                {
+                    //strcpy( _errMsg, "Sampler buffer overflow.");
+                    sprintf( const_cast<char*>(_errMsg),
+                             "Buffer will overflow when adding %d samples. \n Buffer Size now: %d.",
+                             nrsamp2get,_nrSamples
+                           );
+
+                    _ok = false;
+    //                return NULL;  // Don't return, wait until we're reset.
+                }
+
+#if 1
+    /*
+                for(uint32 cnt = 0; cnt < nrsamp2get;)
+                { 
+                    //  & 0xFFFF : mask out channel ID, etc.
+                    _volt[_nrSamples] = shared_ram[buffer_position+cnt++];
+                    _curr[_nrSamples] = shared_ram[buffer_position+cnt++];
+                    _nrSamples++;
+                }
+    */
+
+                for(uint32 cnt = 0; cnt < nrsamp2get; cnt++)
+                {
+                    uint32 sample = shared_ram[buf_tail++];
+                    _volt[_nrSamples] = sample >> 16;
+                    _curr[_nrSamples] = sample & 0xFFFF;
+/*
+                    if( !printed )
+                        printf( "Sample: %u, Volt %u, Current %u \n",
+                                sample,  _volt[_nrSamples], _curr[_nrSamples]);
+*/
+
+                    if (buf_tail >= MAX_BUF_IDX)
+                        { buf_tail = 0; }
+
+                    _nrSamples++;
+                }
+
+#else
+                volatile uint16* p_v = &_volt[_nrSamples];
+                volatile uint16* p_c = &_curr[_nrSamples];
+                //uint32* p_s_s = &shared_ram[buffer_position];
+                uint32* p_s_e = &shared_ram[buffer_position+nrsamp2get];
+                
+                for(uint32* p_s_s = &shared_ram[buffer_position]; p_s_s < p_s_e;)
+                { 
+                    //  & 0xFFFF : mask out channel ID, etc. Now done by PRU
+                    //_volt[_nrSamples] = shared_ram[buffer_position+cnt++] & 0x0FFF;
+                    //_curr[_nrSamples] = shared_ram[buffer_position+cnt++] & 0x0FFF;
+                    *(p_v++) = *(p_s_s++);
+                    *(p_c++) = *(p_s_s++);
+                }
+                _nrSamples+=nrsamp2get;
+#endif
+
+    /*
+                if(count%10000 == 0){
+                    // Print info
+
+                    uint32 val1 = shared_ram[buffer_position];
+                    val1 &= 0xFFF;
+                    uint32 val2 = shared_ram[buffer_position+1];
+                    val2 &= 0xFFF;
+
+                    printf("Values: %u %u\n", val1, val2);
+                    printf("In my buf: %u %u\n", _volt[_nrSamples-1],_curr[_nrSamples-1]);
+
+                    printf("Buffer addr: %u \n", shared_vars[0]);
+                    printf("buffer  cnt: %u \n", shared_vars[1]);
+                }
+                count++;
+    */
+                buf_head = shared_vars[1];
+                if( buf_tail == 0xdeadbeef ) buf_tail = buf_head;
+
+                interrupt_count = shared_vars[2];
+                nrsamp2get = ( buf_head >= buf_tail ? (buf_head-buf_tail)
+                                                    : (MAX_BUF_IDX-buf_tail+buf_head) );
+            }
+        }
+
+        // Interrupt handled. Ready for next.
+        prussdrv_pru_clear_event(PRU_EVTOUT_0, PRU0_ARM_INTERRUPT);
     }
 
     return NULL;
@@ -207,6 +328,8 @@ void Sampler::calibrateCurrent()
     usleep( sample_time_usecs );
     uint32 stopidx = lastIdx();
 
+    stop();
+
     StdDeviation sd(*this, startidx, stopidx);
 
     means[meansidx++] = sd.CalculateMean();
@@ -222,6 +345,8 @@ void Sampler::calibrateCurrent()
         StdDeviation sd2(means, meansidx);
         current_mean = sd2.CalculateMean();
     }
+
+    reset();
 }
 
 #define OVERLAY "PRUSSDRV"
@@ -266,6 +391,7 @@ void Sampler::init_pru_program()
    void* p;
    prussdrv_map_prumem(PRUSS0_SHARED_DATARAM, &p);
    shared_ram = (uint32*)p;
+   shared_vars = (uint32*)( (char*)p + VARS_OFFSET );
 
    prussdrv_load_datafile(PRU_NUM, "../src/data.bin");
    prussdrv_exec_program_at(PRU_NUM, "../src/text.bin", START_ADDR);
@@ -275,19 +401,30 @@ void Sampler::init_pru_program()
 
 void Sampler::start_thread()
 {
-    pthread_attr_t attr;
-    if(pthread_attr_init(&attr)){
+    //set attributes
+    pthread_attr_t attr1;
+    struct sched_param parm1;
+
+    if(pthread_attr_init(&attr1)){
+     printf("Cannot start a new thread.\n");
+     exit(1);
+    }
+
+    /* Create independent threads each of which will execute function */
+
+    pthread_attr_getschedparam(&attr1, &parm1);
+    parm1.sched_priority = sched_get_priority_max(SCHED_FIFO);
+    pthread_attr_setschedpolicy(&attr1, SCHED_FIFO);
+    pthread_attr_setschedparam(&attr1, &parm1);
+
+    if(pthread_create(&thread, &attr1, &Sampler::samplingThread, NULL)){
         printf("Cannot start a new thread.\n");
         exit(1);
     }
-    if(pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED)){
-        printf("Cannot start a new thread.");
-        exit(1);
-    }
-    if(pthread_create(&thread, &attr, &Sampler::samplingThread, NULL)){
-        printf("Cannot start a new thread.");
-        exit(1);
-    }
+
+    pthread_setschedparam(thread, SCHED_FIFO, &parm1);
+
+
 }
 
 void Sampler::stop_thread()

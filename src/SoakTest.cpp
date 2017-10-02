@@ -47,8 +47,8 @@ using namespace std;
 
 #define BEDINI
 #ifdef BEDINI
-#define PWM_START_FREQ 300
-#define PWM_STOP_FREQ  11000
+#define PWM_START_FREQ 1250
+#define PWM_STOP_FREQ  10000
 // P9_14 MUST be loaded as a slot before use
 static PWM           charge_pwm("pwm_test_P9_14.13"); 
 #else
@@ -155,7 +155,7 @@ void signalHandler( int signum ) {
     exit(signum);
 }
 
-//#define NO_FILTER
+#define NO_FILTER
 #ifdef NO_FILTER
 # define mGetVoltage(idx) sampler.getVoltage(idx)
 # define mGetCurrent(idx) sampler.getCurrent(idx)
@@ -205,13 +205,16 @@ int main(int argc, char **argv)
 #else
     charge_pwm.setPolarity(PWM::ACTIVE_HIGH);
 #endif
+    charge_pwm.setDutyCycle(0);
+    charge_pwm.run();
 
     _outGPIO.setDirection(OUTPUT);
 
 
     float fully_charged_voltage = 22.0f;   //!< stop charging 
     //float fully_charged_voltage = 7.5f;   //!< stop charging 
-    float fully_discharged_voltage = 0.2f; //!< stop discharging
+    //float fully_discharged_voltage = 0.2f; //!< stop discharging
+    float fully_discharged_voltage = 14.5f; //!< stop discharging
 
     float v_val = 0.0f;
     float max_perc = 0.0f;
@@ -222,11 +225,19 @@ int main(int argc, char **argv)
 
     startDischarge();
 
-    usleep( 1000000 ); // 1 sec
+    usleep( 10000000 ); // 1 sec
 
     stopDischarge();
 
     sampler.calibrateCurrent();
+
+    if( !sampler.ok() || !sampler.nrSamples() )
+    {
+        printf("Sampler error while calibrating (%s)\n", sampler.errMsg());
+        sampler.reset();
+    }
+
+    printf("Sampler current mean: %5.2f\n", sampler.currentMean() );
 
     printf("run, freq, injoules, outjoules, perc, sampler_current_mean\n");
 
@@ -244,7 +255,7 @@ int main(int argc, char **argv)
 
         startCharge();
 
-        const uint32 n_smp=32;
+        const uint32 n_smp=8;
 
         bool done=false;
         do { //                               wait for end of charge cycle
@@ -273,7 +284,8 @@ int main(int argc, char **argv)
                 error = true;
             }
 
-            usleep(500); // At 500 us, we will fetch about 100 samples 
+            //usleep(500); // At 500 us, we will fetch about 100 samples 
+            usleep(5000); // At 500 us, we will fetch about 100 samples 
 
         } while( !done );
 
@@ -281,14 +293,16 @@ int main(int argc, char **argv)
 
         stopCharge();
 
-//        usleep( 1000 ); // 1 msec
-        usleep( 50000 ); // 50 msec
+        usleep( 1000 ); // 1 msec
+//        usleep( 50000 ); // 50 msec
 //        sampler.calibrateCurrent();
 
 //        printf("Start discharging.\n");
 
         startDischarge();
 
+#define USEAVEAGE
+#ifdef USEAVEAGE
         done=false;
         do { //                               wait for end of discharge cycle
             done = true;
@@ -316,18 +330,25 @@ int main(int argc, char **argv)
                 usleep( 500000 );// make sure we've discharged
             }
 
-            usleep(500); // At 500 us, we will fetch about 100 samples 
+            usleep(10); // At 500 us, we will fetch about 100 samples 
         } while( !done );
-
+#else
+        while( sampler.getVoltage( sampler.lastIdx() ) > fully_discharged_voltage)
+        {
+            usleep(10);
+        }
+#endif
 
 //        usleep( 10000 ); // 10 msec
+//        usleep( 1000 ); // 1 msec
 
         stopDischarge();
 
-        usleep( 10000 ); // 10 msec
+        usleep( 1000 ); // 1 msec
+//        usleep( 10000 ); // 10 msec
 
 //        printf("Calibrate current.\n");
-        sampler.calibrateCurrent();
+//        sampler.calibrateCurrent();
         sampler.stop();
 
         if( !error && sampler.ok() ) 
@@ -450,20 +471,30 @@ int main(int argc, char **argv)
 #ifdef BEDINI
             if( perc > max_perc && n>10 && perc > 50.0 )
 #else
-            if( perc > max_perc && n>10 && charge_pwm_freq > 5000 )
+            if( perc > max_perc && n>10 
+               || perc > 100.0 )
 #endif
             {
                 max_perc = perc;
-                printf("Saving best result\n");
+
+#define     PATH "/data/arend/work/SoakageTester/bin"
+
+                char filename[256];
+                sprintf( filename, "%s/%.2f-%.2f-%2.0f.log",
+                         PATH,perc,charge_pwm_freq,charge_pwm_duty_perc
+                       );
+
+                printf("Saving best result to: %s \n",filename);
+
 #ifdef NO_FILTER
-                buf2file( "/data/arend/work/SoakageTester/bin/buf.log");
+                buf2file( filename );
 #else
-                buf2file( "/data/arend/work/SoakageTester/bin/buf.log",
+                buf2file( filename,
                           voltage, current, nsamples);
 #endif
             }
 
-            charge_pwm_freq *= 1.001; 
+            charge_pwm_freq *= 1.01; 
             //charge_pwm_freq += 11;
             //
 #ifndef NO_FILTER
@@ -480,7 +511,7 @@ int main(int argc, char **argv)
         { 
             error = false;
             charge_pwm_freq = PWM_START_FREQ;
-            charge_pwm_duty_perc += 0.1;
+            charge_pwm_duty_perc += 1;
         }
 #else
         float duty = charge_pwm_duration/(1e9/charge_pwm_freq);

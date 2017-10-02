@@ -30,7 +30,7 @@ static Sampler       sampler;
 
 void cleanUp()
 {
-    sampler.cleanUp();
+//    sampler.cleanUp();
 }
 
 
@@ -96,6 +96,8 @@ int main(int argc, char **argv)
 
     if( ! sampler.ok() )
         printf("Sampler error (%s)\n", sampler.errMsg()); 
+
+    sampler.stop();
 
     unsigned long stopTime=timeStamp();
 

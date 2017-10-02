@@ -57,7 +57,7 @@ class Sampler {
     inline float    currentMean()  { return current_mean; }
     void            calibrateCurrent();
 
-    void            stop()         { _active = false; }
+    void            stop();
 
   private:
 
@@ -67,6 +67,11 @@ class Sampler {
     volatile static bool     _ok;
     volatile static bool     _active;
     volatile static char     _errMsg[];
+
+    volatile static uint32   buf_head;
+    volatile static uint32   buf_tail;
+    volatile static uint32   interrupt_count;
+    volatile static uint32   last_interrupt_count;
 
     float           current_mean;
 
