@@ -3,11 +3,17 @@ Hard and software for studying dielectric absorption aka "soakage" in electrolyt
 
 # Intro
 
-This is a capacitor/battery pulsed charge-discharge cycle tester, as
-part of a project to investigate the theory that the well known
-"capacitor soakage" or "battery action" effect observed with
-electrolytic capacitors can be enhanced using pulsed charging, as
-demonstrated by John Bedini et al for years.
+This is a capacitor/battery pulsed charge-discharge cycle tester, as part of a
+project to investigate the theory that the well known "capacitor soakage" or
+"battery action" effect observed with electrolytic capacitors can be enhanced
+using pulsed charging, as demonstrated by John Bedini et al for years. For
+more information on the theory, see my article about [The Cole-Hackenberger
+(Gray) Power
+Supply](http://www.tuks.nl/wiki/index.php/Main/ColeHackenbergerPowerSupply).
+
+
+
+# Hardware
 
 The hardware consists of:
 
